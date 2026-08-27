@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ExtractedMedication(BaseModel):
@@ -51,5 +51,4 @@ class MedicalRecordResponse(MedicalRecordBase):
     extracted_data: Dict[str, Any] = {}
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

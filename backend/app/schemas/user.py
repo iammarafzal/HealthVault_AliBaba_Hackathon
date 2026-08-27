@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class EmergencyContact(BaseModel):
@@ -34,8 +34,7 @@ class UserResponse(UserBase):
     role: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PrivacySettings(BaseModel):
@@ -47,5 +46,4 @@ class PrivacySettings(BaseModel):
     qr_revoked: bool = False
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

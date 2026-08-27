@@ -3,12 +3,19 @@
 
 from fastapi import APIRouter
 
+from app.api.v1.emergency import router as emergency_router
+from app.api.v1.interactions import router as interactions_router
+from app.api.v1.summary import router as summary_router
 from app.api.v1.vault import router as vault_router
 
 api_router = APIRouter()
 
 # Register v1 feature routers
 api_router.include_router(vault_router)
+api_router.include_router(summary_router)
+api_router.include_router(interactions_router)
+api_router.include_router(emergency_router)
+
 
 # Health check within v1
 @api_router.get("/health", tags=["Health"])
