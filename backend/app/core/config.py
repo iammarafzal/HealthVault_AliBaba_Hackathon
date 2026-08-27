@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     # Feature Flags
     USE_MOCK: bool = False
 
+    # OCR — PaddleOCR pipeline
+    OCR_USE_GPU: bool = False
+    OCR_LANG: str = "en"
+
     # CORS Settings (Accepts list or comma-separated string)
     CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:3000",

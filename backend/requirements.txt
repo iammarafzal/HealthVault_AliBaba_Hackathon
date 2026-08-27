@@ -28,6 +28,7 @@ paddleocr
 paddlepaddle
 langgraph
 langchain-core
+pypdf
 
 # Utilities & Networking
 python-dotenv
