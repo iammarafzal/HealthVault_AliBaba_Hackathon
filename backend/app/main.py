@@ -1,10 +1,14 @@
 from contextlib import asynccontextmanager
 import logging
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.api.router import api_router
+from app.services.storage_service import storage_service
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -15,6 +19,9 @@ logger = logging.getLogger("healthvault")
 async def lifespan(app: FastAPI):
     """Lifespan event handler for startup and shutdown actions."""
     logger.info(f"Starting {settings.PROJECT_NAME} in {settings.ENVIRONMENT} mode...")
+    # Ensure the local uploads directory exists before serving files
+    await storage_service.ensure_directory()
+    logger.info(f"Uploads directory ready at '{settings.UPLOAD_DIR}/'")
     yield
     logger.info(f"Shutting down {settings.PROJECT_NAME}...")
 
@@ -42,6 +49,14 @@ def create_application() -> FastAPI:
 
     # Include API Routers
     app.include_router(api_router, prefix=settings.API_V1_STR)
+
+    # Static file serving for locally stored medical documents
+    Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+    app.mount(
+        "/uploads",
+        StaticFiles(directory=settings.UPLOAD_DIR),
+        name="uploads",
+    )
 
     @app.get("/", tags=["Root"])
     async def root():

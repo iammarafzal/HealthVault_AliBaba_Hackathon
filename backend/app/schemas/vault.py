@@ -1,7 +1,7 @@
 # HealthVault AI — Vault Pydantic Schemas
 # ExtractedMedication, ExtractedAllergy, ExtractionResponse, MedicalRecordBase, MedicalRecordResponse
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -49,7 +49,7 @@ class MedicalRecordResponse(MedicalRecordBase):
     user_id: UUID
     raw_ocr_text: Optional[str] = None
     extracted_data: Dict[str, Any] = {}
-    created_at: str
+    created_at: datetime
 
     class Config:
         from_attributes = True

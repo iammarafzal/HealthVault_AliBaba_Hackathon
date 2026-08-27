@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://user:password@localhost:5432/healthvault"
 
+    # Local File Storage (served via FastAPI StaticFiles mount)
+    UPLOAD_DIR: str = "uploads"
+    SERVER_BASE_URL: str = "http://localhost:8000"
+
     # Authentication & Security
     SECRET_KEY: str = "change-me-to-a-random-secret"
     ALGORITHM: str = "HS256"
