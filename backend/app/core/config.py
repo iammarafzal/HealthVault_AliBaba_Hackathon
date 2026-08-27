@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import List, Union
+from typing import List, Optional, Union
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -27,21 +27,33 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-    # Alibaba Cloud — DashScope (Qwen LLM / Multi-Agent Pipeline)
-    DASHSCOPE_API_KEY: str = ""
-
-    # Alibaba Cloud — Object Storage Service (OSS)
-    OSS_ACCESS_KEY_ID: str = ""
-    OSS_ACCESS_KEY_SECRET: str = ""
-    OSS_BUCKET_NAME: str = ""
-    OSS_ENDPOINT: str = ""
-
     # Feature Flags
     USE_MOCK: bool = False
 
     # OCR — PaddleOCR pipeline
     OCR_USE_GPU: bool = False
     OCR_LANG: str = "en"
+
+    # ----------------------------------------------------------------------
+    # Pluggable LLM Configuration (Switch seamlessly between Qwen & Gemini)
+    # Options for LLM_PROVIDER: "dashscope" | "qwen" | "gemini" | "mock"
+    # ----------------------------------------------------------------------
+    LLM_PROVIDER: str = "dashscope"
+    LLM_MODEL_NAME: Optional[str] = None  # Explicit override if set
+
+    # Alibaba Cloud — DashScope (Qwen Models: qwen-plus, qwen-max, qwen-turbo)
+    DASHSCOPE_API_KEY: str = ""
+    DASHSCOPE_MODEL_NAME: str = "qwen-plus"
+
+    # Google AI Studio — Gemini Models (gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash)
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL_NAME: str = "gemini-1.5-flash"
+
+    # Alibaba Cloud — Object Storage Service (OSS)
+    OSS_ACCESS_KEY_ID: str = ""
+    OSS_ACCESS_KEY_SECRET: str = ""
+    OSS_BUCKET_NAME: str = ""
+    OSS_ENDPOINT: str = ""
 
     # CORS Settings (Accepts list or comma-separated string)
     CORS_ORIGINS: Union[List[str], str] = [
