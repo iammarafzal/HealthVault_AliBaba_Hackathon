@@ -1,0 +1,2 @@
+- Backend routes are grouped by domain (auth, records, voice/OCR, agents) under the FastAPI application.
+- External cloud integrations are abstracted behind service-layer modules rather than called directly from handlers.

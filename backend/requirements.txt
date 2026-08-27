@@ -1,0 +1,39 @@
+# HealthVault AI — Backend Dependencies
+# Install: pip install -r requirements.txt
+
+# Web Framework
+fastapi
+uvicorn[standard]
+
+# Database
+sqlalchemy[asyncio]
+asyncpg
+alembic
+
+# Pydantic & Validation
+pydantic[email]
+pydantic-settings
+
+# Authentication & Security
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+
+# Alibaba Cloud Services
+dashscope
+oss2
+
+# AI / OCR / Agents
+paddleocr
+paddlepaddle
+langgraph
+langchain-core
+
+# Utilities & Networking
+python-dotenv
+httpx
+aiofiles
+
+# Testing & Development
+pytest
+pytest-asyncio

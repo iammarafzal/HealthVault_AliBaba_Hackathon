@@ -1,0 +1,4 @@
+- Each module file begins with a two-line docstring header identifying the project and the file's responsibility.
+- External service integrations are isolated in dedicated `services/` modules (ASR, OCR, OSS) rather than called directly from route handlers.
+- Request and response payloads are validated using Pydantic schemas colocated in `schemas/` alongside their corresponding ORM models in `models/`.
+- Configuration and secrets are loaded centrally via pydantic-settings from `.env` instead of being hard-coded or passed as arguments.

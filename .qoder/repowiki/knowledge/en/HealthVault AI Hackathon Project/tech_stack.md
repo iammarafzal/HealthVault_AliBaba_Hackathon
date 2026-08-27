@@ -1,0 +1,1 @@
+FastAPI for the API server, PostgreSQL for persistence, and Alibaba Cloud services for external integrations.

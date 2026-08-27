@@ -1,0 +1,1 @@
+FastAPI-based backend providing authenticated REST APIs for medical record management, voice/OCR processing, and multi-agent document extraction backed by PostgreSQL and Alibaba Cloud services.

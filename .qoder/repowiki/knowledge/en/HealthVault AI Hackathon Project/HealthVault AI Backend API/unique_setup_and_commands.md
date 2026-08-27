@@ -1,0 +1,1 @@
+Run with `uvicorn app.main:app --host 0.0.0.0 --port 8000` or via the provided Dockerfile (`python:3.11-slim`). Copy `.env.example` to `.env` and populate `DATABASE_URL`, `SECRET_KEY`, `DASHSCOPE_API_KEY`, and OSS credentials before starting. Database schema migrations are managed via Alembic.

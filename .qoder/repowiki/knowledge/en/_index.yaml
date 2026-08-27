@@ -1,0 +1,26 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: en-US
+branch: main
+nodes_managed: true
+exported_at: "2026-08-23T03:07:16Z"
+modules:
+    "":
+        dir_name: HealthVault AI Hackathon Project
+        title: HealthVault AI Hackathon Project
+        scope:
+            - README.md
+        source_files: []
+        children:
+            - backend
+        depends_on: []
+        related_to: []
+    backend:
+        dir_name: HealthVault AI Backend API
+        title: HealthVault AI Backend API
+        scope:
+            - backend/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []

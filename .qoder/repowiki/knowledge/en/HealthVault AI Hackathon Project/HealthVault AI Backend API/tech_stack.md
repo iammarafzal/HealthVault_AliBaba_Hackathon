@@ -1,0 +1,1 @@
+FastAPI + Uvicorn ASGI server; async SQLAlchemy + asyncpg + Alembic for PostgreSQL; Pydantic v2 with pydantic-settings for configuration; JWT auth via python-jose[cryptography] and passlib[bcrypt]; Alibaba Cloud DashScope (Qwen LLMs), OSS, and ASR SDKs; PaddleOCR for document scanning; LangGraph/LangChain for multi-agent orchestration.

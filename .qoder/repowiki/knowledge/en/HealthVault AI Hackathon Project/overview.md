@@ -1,0 +1,1 @@
+Hackathon project that combines a FastAPI backend with frontend and infrastructure components to deliver authenticated medical record management, voice/OCR processing, and multi-agent document extraction.

@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: ""
+title: HealthVault AI Hackathon Project
+scope:
+    - README.md
+source_files: []
+depends_on: []
+related_to: []
