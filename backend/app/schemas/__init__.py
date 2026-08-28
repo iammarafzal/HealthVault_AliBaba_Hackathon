@@ -22,6 +22,7 @@ from app.schemas.vault import (  # noqa: F401
 from app.schemas.emergency import EmergencyProfileResponse  # noqa: F401
 from app.schemas.biomarker import (  # noqa: F401
     BiomarkerDataPoint,
+    BiomarkerSeries,
     BiomarkerTimelineResponse,
 )
 from app.schemas.summary import DoctorSummaryResponse  # noqa: F401
@@ -53,6 +54,7 @@ __all__ = [
     "EmergencyProfileResponse",
     # Biomarker
     "BiomarkerDataPoint",
+    "BiomarkerSeries",
     "BiomarkerTimelineResponse",
     # Summary
     "DoctorSummaryResponse",
