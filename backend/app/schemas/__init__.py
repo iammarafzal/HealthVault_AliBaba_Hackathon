@@ -32,6 +32,8 @@ from app.schemas.interactions import (  # noqa: F401
     InteractionCheckResponse,
 )
 from app.schemas.voice import (  # noqa: F401
+    VoiceIntentRequest,
+    VoiceIntentResponse,
     VoiceQueryRequest,
     VoiceQueryResponse,
     VoiceTranscriptionResponse,
@@ -67,6 +69,8 @@ __all__ = [
     "InteractionCheckRequest",
     "InteractionCheckResponse",
     # Voice
+    "VoiceIntentRequest",
+    "VoiceIntentResponse",
     "VoiceQueryRequest",
     "VoiceQueryResponse",
     "VoiceTranscriptionResponse",
