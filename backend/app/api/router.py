@@ -3,6 +3,7 @@
 
 from fastapi import APIRouter
 
+from app.api.v1.biomarkers import router as biomarkers_router
 from app.api.v1.emergency import router as emergency_router
 from app.api.v1.interactions import router as interactions_router
 from app.api.v1.summary import router as summary_router
@@ -17,6 +18,7 @@ api_router.include_router(summary_router)
 api_router.include_router(interactions_router)
 api_router.include_router(emergency_router)
 api_router.include_router(user_router)
+api_router.include_router(biomarkers_router)
 
 
 # Health check within v1
