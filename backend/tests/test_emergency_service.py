@@ -11,9 +11,11 @@ from app.main import app
 from app.models.allergy import Allergy
 from app.models.medication import Medication
 from app.models.record import MedicalRecord
-from app.models.user import PrivacySettings, User
+from app.models.user import PrivacySettings as PrivacySettingsORM, User
 from app.schemas.emergency import EmergencyProfileResponse
-from app.services.emergency_service import EmergencyService, _build_profile, _fetch_medical_data
+from app.schemas.user import PrivacySettings
+from app.services.emergency_service import EmergencyService, _fetch_medical_data
+from app.services.privacy_service import PrivacyFilterService
 
 
 def _create_test_user(health_id: str = "HV-99999") -> User:
@@ -37,9 +39,9 @@ def _create_test_user(health_id: str = "HV-99999") -> User:
 # ==============================================================================
 
 def test_build_profile_all_visible():
+    """PrivacyFilterService returns all fields when all flags are True."""
     user = _create_test_user()
     privacy = PrivacySettings(
-        user_id=user.id,
         show_blood_group=True,
         show_allergies=True,
         show_active_meds=True,
@@ -47,23 +49,16 @@ def test_build_profile_all_visible():
         show_emergency_contacts=True,
         qr_revoked=False,
     )
-    meds = [Medication(id=uuid.uuid4(), user_id=user.id, name="Insulin", dosage="10 units", is_active=True)]
-    allergies = [Allergy(id=uuid.uuid4(), user_id=user.id, allergen="Penicillin", severity="severe")]
-    records = [
-        MedicalRecord(
-            id=uuid.uuid4(),
-            user_id=user.id,
-            document_type="prescription",
-            extracted_data={"diagnoses": ["Type 1 Diabetes"]},
-        )
-    ]
 
-    profile = _build_profile(
-        user=user,
-        privacy=privacy,
-        active_meds=meds,
-        severe_allergies=allergies,
-        records=records,
+    profile = PrivacyFilterService.filter_emergency_data(
+        raw_user_health_id=user.health_id,
+        raw_user_full_name=user.full_name,
+        raw_user_blood_group=user.blood_group,
+        raw_user_emergency_contacts=user.emergency_contacts,
+        privacy_settings=privacy,
+        active_meds=["Insulin 10 units"],
+        allergies=["Penicillin (severe)"],
+        chronic_conditions=["Type 1 Diabetes"],
     )
 
     assert isinstance(profile, EmergencyProfileResponse)
@@ -78,9 +73,9 @@ def test_build_profile_all_visible():
 
 
 def test_build_profile_privacy_redacted():
+    """PrivacyFilterService masks ALL fields when all flags are False."""
     user = _create_test_user()
     privacy = PrivacySettings(
-        user_id=user.id,
         show_blood_group=False,
         show_allergies=False,
         show_active_meds=False,
@@ -88,23 +83,16 @@ def test_build_profile_privacy_redacted():
         show_emergency_contacts=False,
         qr_revoked=False,
     )
-    meds = [Medication(id=uuid.uuid4(), user_id=user.id, name="Insulin", dosage="10 units", is_active=True)]
-    allergies = [Allergy(id=uuid.uuid4(), user_id=user.id, allergen="Penicillin", severity="severe")]
-    records = [
-        MedicalRecord(
-            id=uuid.uuid4(),
-            user_id=user.id,
-            document_type="prescription",
-            extracted_data={"diagnoses": ["Type 1 Diabetes"]},
-        )
-    ]
 
-    profile = _build_profile(
-        user=user,
-        privacy=privacy,
-        active_meds=meds,
-        severe_allergies=allergies,
-        records=records,
+    profile = PrivacyFilterService.filter_emergency_data(
+        raw_user_health_id=user.health_id,
+        raw_user_full_name=user.full_name,
+        raw_user_blood_group=user.blood_group,
+        raw_user_emergency_contacts=user.emergency_contacts,
+        privacy_settings=privacy,
+        active_meds=["Insulin 10 units"],
+        allergies=["Penicillin (severe)"],
+        chronic_conditions=["Type 1 Diabetes"],
     )
 
     assert profile.blood_group is None
@@ -113,6 +101,32 @@ def test_build_profile_privacy_redacted():
     assert profile.chronic_conditions == []
     assert profile.emergency_contacts == []
     assert profile.is_revoked is False
+
+
+def test_build_profile_qr_revoked_masks_everything():
+    """PrivacyFilterService returns is_revoked=True with all data masked."""
+    user = _create_test_user()
+    privacy = PrivacySettings(qr_revoked=True)
+
+    profile = PrivacyFilterService.filter_emergency_data(
+        raw_user_health_id=user.health_id,
+        raw_user_full_name=user.full_name,
+        raw_user_blood_group=user.blood_group,
+        raw_user_emergency_contacts=user.emergency_contacts,
+        privacy_settings=privacy,
+        active_meds=["Insulin 10 units"],
+        allergies=["Penicillin (severe)"],
+        chronic_conditions=["Type 1 Diabetes"],
+    )
+
+    assert profile.is_revoked is True
+    assert profile.health_id == user.health_id
+    assert profile.full_name == user.full_name
+    assert profile.blood_group is None
+    assert profile.critical_allergies == []
+    assert profile.active_medications == []
+    assert profile.chronic_conditions == []
+    assert profile.emergency_contacts == []
 
 
 # ==============================================================================
@@ -131,7 +145,15 @@ async def test_get_emergency_profile_user_not_found():
 @pytest.mark.asyncio
 async def test_get_emergency_profile_qr_revoked():
     user = _create_test_user("HV-REVOKED")
-    privacy = PrivacySettings(user_id=user.id, qr_revoked=True)
+    privacy = PrivacySettingsORM(
+        user_id=user.id,
+        show_blood_group=True,
+        show_allergies=True,
+        show_active_meds=True,
+        show_chronic_conditions=True,
+        show_emergency_contacts=True,
+        qr_revoked=True,
+    )
 
     mock_db = AsyncMock()
     # 1. user lookup, 2. privacy lookup

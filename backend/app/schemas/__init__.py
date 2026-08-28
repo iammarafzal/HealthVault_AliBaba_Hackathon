@@ -4,6 +4,10 @@
 from app.schemas.user import (  # noqa: F401
     EmergencyContact,
     PrivacySettings,
+    PrivacySettingsResponse,
+    PrivacySettingsUpdate,
+    QRRegenerateRequest,
+    QRRegenerateResponse,
     UserBase,
     UserCreate,
     UserResponse,
@@ -32,6 +36,10 @@ __all__ = [
     # User
     "EmergencyContact",
     "PrivacySettings",
+    "PrivacySettingsResponse",
+    "PrivacySettingsUpdate",
+    "QRRegenerateRequest",
+    "QRRegenerateResponse",
     "UserBase",
     "UserCreate",
     "UserResponse",
