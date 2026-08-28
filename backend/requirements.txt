@@ -29,6 +29,7 @@ paddlepaddle
 langgraph
 langchain-core
 pypdf
+groq
 
 # Utilities & Networking
 python-dotenv

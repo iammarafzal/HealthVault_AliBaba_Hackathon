@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     OSS_BUCKET_NAME: str = ""
     OSS_ENDPOINT: str = ""
 
+    # Groq — Whisper Speech-to-Text (Urdu ASR)
+    GROQ_API_KEY: str = ""
+    GROQ_ASR_MODEL: str = "whisper-large-v3"
+
     # CORS Settings (Accepts list or comma-separated string)
     CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:3000",
