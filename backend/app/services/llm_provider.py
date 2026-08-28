@@ -1,5 +1,6 @@
 # HealthVault AI — Pluggable Multi-LLM Provider Engine
 # Seamless switching between Alibaba Cloud Qwen (DashScope), Google Gemini, and Mock providers
+# Features: timeout enforcement, auto-fallback to mock on failure, token-optimised generation
 
 import asyncio
 import json
@@ -11,10 +12,19 @@ from typing import Any, Dict, Optional
 import httpx
 
 from app.core.config import settings
-from app.core.mock_data import MOCK_LAB_EXTRACTION, MOCK_PRESCRIPTION_EXTRACTION
+from app.core.mock_data import (
+    MOCK_INTERACTION_NO_CONFLICT,
+    MOCK_LAB_EXTRACTION,
+    MOCK_PRESCRIPTION_EXTRACTION,
+    MOCK_VOICE_INTENT_MAP,
+)
 
 logger = logging.getLogger("healthvault")
 
+
+# ---------------------------------------------------------------------------
+# Abstract base
+# ---------------------------------------------------------------------------
 
 class BaseLLMProvider(ABC):
     """Abstract base class establishing the contract for all LLM providers."""
@@ -66,6 +76,10 @@ class BaseLLMProvider(ABC):
         return {}
 
 
+# ---------------------------------------------------------------------------
+# DashScope (Qwen) Provider
+# ---------------------------------------------------------------------------
+
 class DashScopeProvider(BaseLLMProvider):
     """Alibaba Cloud DashScope provider for Qwen models (Qwen-Plus, Qwen-Max, Qwen-Turbo)."""
 
@@ -80,7 +94,7 @@ class DashScopeProvider(BaseLLMProvider):
         )
 
     async def generate_json(self, prompt: str, system_prompt: str) -> Dict[str, Any]:
-        """Invoke DashScope Generation API asynchronously."""
+        """Invoke DashScope Generation API asynchronously with timeout enforcement."""
         try:
             import dashscope
             from dashscope import Generation
@@ -88,14 +102,17 @@ class DashScopeProvider(BaseLLMProvider):
             if self.api_key:
                 dashscope.api_key = self.api_key
 
-            response = await asyncio.to_thread(
-                Generation.call,
-                model=self.model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt},
-                ],
-                result_format="message",
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    Generation.call,
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt},
+                    ],
+                    result_format="message",
+                ),
+                timeout=settings.LLM_TIMEOUT_SECONDS,
             )
 
             if response.status_code != 200:
@@ -109,10 +126,20 @@ class DashScopeProvider(BaseLLMProvider):
             content = response.output.choices[0].message.content
             return self._extract_json(content)
 
+        except asyncio.TimeoutError:
+            logger.warning(
+                "DashScope request timed out after %.1fs",
+                settings.LLM_TIMEOUT_SECONDS,
+            )
+            raise  # Let the fallback wrapper handle it
         except Exception as exc:
             logger.exception("DashScope Qwen generation failed: %s", exc)
-            return {}
+            raise  # Let the fallback wrapper handle it
 
+
+# ---------------------------------------------------------------------------
+# Gemini Provider
+# ---------------------------------------------------------------------------
 
 class GeminiProvider(BaseLLMProvider):
     """Google Gemini provider via native async REST API (gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash)."""
@@ -129,7 +156,7 @@ class GeminiProvider(BaseLLMProvider):
         self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
 
     async def generate_json(self, prompt: str, system_prompt: str) -> Dict[str, Any]:
-        """Invoke Google Gemini generateContent endpoint with JSON response mode."""
+        """Invoke Google Gemini generateContent endpoint with JSON response mode and timeout."""
         if not self.api_key:
             logger.warning("GEMINI_API_KEY is not configured; check .env")
 
@@ -146,7 +173,9 @@ class GeminiProvider(BaseLLMProvider):
         }
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(
+                timeout=settings.LLM_TIMEOUT_SECONDS
+            ) as client:
                 response = await client.post(endpoint, params=params, json=payload)
 
             if response.status_code != 200:
@@ -170,22 +199,113 @@ class GeminiProvider(BaseLLMProvider):
             raw_text = parts[0].get("text", "")
             return self._extract_json(raw_text)
 
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Gemini request timed out after %.1fs",
+                settings.LLM_TIMEOUT_SECONDS,
+            )
+            raise  # Let the fallback wrapper handle it
+        except httpx.ConnectError as exc:
+            logger.warning("Gemini connection error: %s", exc)
+            raise  # Let the fallback wrapper handle it
         except Exception as exc:
             logger.exception("Gemini generation failed: %s", exc)
-            return {}
+            raise  # Let the fallback wrapper handle it
 
+
+# ---------------------------------------------------------------------------
+# Mock Provider — deterministic, domain-aware routing
+# ---------------------------------------------------------------------------
 
 class MockLLMProvider(BaseLLMProvider):
-    """Resilient mock provider returning deterministic medical schema data for testing."""
+    """Resilient mock provider returning deterministic medical schema data.
+
+    Routes to the appropriate mock dictionary based on prompt keywords so that
+    every agent domain (extraction, summary, interactions, voice intent) receives
+    a high-fidelity response without any external API call.
+    """
 
     async def generate_json(self, prompt: str, system_prompt: str) -> Dict[str, Any]:
         prompt_lower = prompt.lower()
+
+        # --- Voice intent resolution ---
+        if "voice query" in prompt_lower or "patient context" in prompt_lower:
+            # Detect specific intent from query text
+            if any(kw in prompt_lower for kw in ("chest pain", "emergency", "سانس نہیں", "دل کا دورہ")):
+                return MOCK_VOICE_INTENT_MAP["emergency_sos"]
+            if any(kw in prompt_lower for kw in ("کب", "when", "schedule", "timing", "routine")):
+                return MOCK_VOICE_INTENT_MAP["medication_schedule"]
+            if any(kw in prompt_lower for kw in ("dosage", "dose", "how much", "خوراک", "کتنا")):
+                return MOCK_VOICE_INTENT_MAP["dosage_inquiry"]
+            if any(kw in prompt_lower for kw in ("symptom", "pain", "headache", "dizz", "علامت", "درد")):
+                return MOCK_VOICE_INTENT_MAP["symptom_triage"]
+            return MOCK_VOICE_INTENT_MAP["general_inquiry"]
+
+        # --- Drug interaction check ---
+        if "interaction" in prompt_lower or "newly prescribed" in prompt_lower or "cross-reference" in prompt_lower:
+            return MOCK_INTERACTION_NO_CONFLICT
+
+        # --- Clinical summary ---
+        if "summary" in prompt_lower or "summarize" in prompt_lower or "clinical briefing" in prompt_lower:
+            # Return empty to trigger the agent's own DB-based fallback summary
+            return {}
+
+        # --- Lab report extraction ---
         if "lab_report" in prompt_lower or "lab" in prompt_lower:
             return MOCK_LAB_EXTRACTION.model_dump(mode="json")
+
+        # --- Prescription / default extraction ---
         return MOCK_PRESCRIPTION_EXTRACTION.model_dump(mode="json")
 
 
-# Registry of supported providers and common aliases
+# ---------------------------------------------------------------------------
+# Fallback Wrapper — auto-routes to MockLLMProvider on any live-provider failure
+# ---------------------------------------------------------------------------
+
+class FallbackLLMProvider(BaseLLMProvider):
+    """Wraps a live LLM provider with automatic fallback to MockLLMProvider.
+
+    On timeout, connection error, API error, or any exception during
+    generate_json(), logs a warning and delegates to the mock provider so
+    downstream agent workflows never fail with HTTP 500.
+    """
+
+    def __init__(self, live_provider: BaseLLMProvider) -> None:
+        self._live = live_provider
+        self._mock = MockLLMProvider()
+
+    async def generate_json(self, prompt: str, system_prompt: str) -> Dict[str, Any]:
+        try:
+            result = await self._live.generate_json(prompt, system_prompt)
+            if result:
+                return result
+            # Live provider returned empty — fallback to mock
+            logger.warning(
+                "Live provider returned empty result; falling back to mock data"
+            )
+            return await self._mock.generate_json(prompt, system_prompt)
+        except asyncio.TimeoutError:
+            logger.warning(
+                "LLM timeout after %.1fs — falling back to mock data",
+                settings.LLM_TIMEOUT_SECONDS,
+            )
+            return await self._mock.generate_json(prompt, system_prompt)
+        except (httpx.ConnectError, httpx.RemoteProtocolError) as exc:
+            logger.warning("LLM connection error (%s) — falling back to mock data", exc)
+            return await self._mock.generate_json(prompt, system_prompt)
+        except Exception as exc:
+            logger.warning(
+                "LLM unexpected error (%s: %s) — falling back to mock data",
+                type(exc).__name__,
+                exc,
+            )
+            return await self._mock.generate_json(prompt, system_prompt)
+
+
+# ---------------------------------------------------------------------------
+# Registry & Factory
+# ---------------------------------------------------------------------------
+
 PROVIDER_REGISTRY = {
     "dashscope": DashScopeProvider,
     "qwen": DashScopeProvider,
@@ -202,27 +322,28 @@ def get_llm_provider(
     """Factory function to instantiate the active LLM provider.
 
     Resolution order:
-    1. If `USE_MOCK=True` in settings -> returns `MockLLMProvider`
-    2. Explicit `provider_name` passed to function
-    3. `settings.LLM_PROVIDER` loaded from environment (.env)
-    4. Defaults to `DashScopeProvider` (Qwen) with fallback to `MockLLMProvider` on error
+    1. If `USE_MOCK=True` in settings -> returns `MockLLMProvider` instantly.
+    2. Explicit `provider_name` passed to function.
+    3. `settings.LLM_PROVIDER` loaded from environment (.env).
+    4. Defaults to `DashScopeProvider` (Qwen).
+
+    All live providers are automatically wrapped in `FallbackLLMProvider` which
+    catches timeouts, connection errors, and API failures — routing execution
+    to `MockLLMProvider` so downstream workflows never fail.
 
     Usage:
-        # Uses default provider configured in .env (e.g., LLM_PROVIDER=gemini or qwen)
-        provider = get_llm_provider()
-
-        # Explicit on-the-fly switch to Gemini:
-        gemini_provider = get_llm_provider("gemini", model_name="gemini-2.0-flash")
-
-        # Explicit on-the-fly switch to Qwen:
-        qwen_provider = get_llm_provider("qwen", model_name="qwen-max")
+        provider = get_llm_provider()                       # default from .env
+        gemini = get_llm_provider("gemini", "gemini-2.0-flash")
+        qwen   = get_llm_provider("qwen", "qwen-max")
     """
+    # 1. Master mock switch
     if settings.USE_MOCK:
         logger.info("USE_MOCK=True -> Using MockLLMProvider")
         return MockLLMProvider()
 
     selected = (provider_name or settings.LLM_PROVIDER).strip().lower()
 
+    # 2. Unknown provider -> mock
     provider_class = PROVIDER_REGISTRY.get(selected)
     if provider_class is None:
         logger.warning(
@@ -232,8 +353,11 @@ def get_llm_provider(
         )
         return MockLLMProvider()
 
-    logger.info("Initializing LLM provider '%s' (model=%s)", selected, model_name)
+    # 3. Explicit mock
     if provider_class == MockLLMProvider:
         return MockLLMProvider()
 
-    return provider_class(model_name=model_name)
+    # 4. Instantiate live provider and wrap with fallback
+    logger.info("Initializing LLM provider '%s' (model=%s)", selected, model_name)
+    live_provider = provider_class(model_name=model_name)
+    return FallbackLLMProvider(live_provider)

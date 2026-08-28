@@ -16,19 +16,19 @@ logger = logging.getLogger("healthvault")
 # System prompts (from AGENT_PROMPTS.md §1)
 # ---------------------------------------------------------------------------
 
-MEDICAL_EXTRACTION_SYSTEM_PROMPT = """You are a highly precise medical data extraction agent.
-Task: Analyze the provided OCR text from a medical document (Prescription, Lab Report, or Discharge Summary) and extract the data strictly into the provided JSON schema.
-Constraints:
-- Do not output any markdown formatting, conversational text, or explanations. Output RAW JSON ONLY.
-- If a value is missing or unclear, omit the key or use `null` / `[]`. Do not guess.
-- Translate any Latin shorthand (e.g., "BD", "TDS", "OD", "PC", "AC") into plain English in the `instructions_en` field."""
+MEDICAL_EXTRACTION_SYSTEM_PROMPT = (
+    "Medical data extraction agent. Analyze OCR text from a prescription, lab report, "
+    "or discharge summary. Extract strictly into JSON schema. "
+    "Rules: RAW JSON only—no markdown, no explanation. Missing values: omit key or null. "
+    "Translate Latin shorthand (BD, TDS, OD, PC, AC) to plain English in instructions_en."
+)
 
-LAB_EXTRACTION_SYSTEM_PROMPT = """You are a clinical laboratory data extraction agent.
-Task: Extract biomarkers, reference ranges, test dates, and status from the provided lab report OCR text.
-Constraints:
-- Output RAW JSON ONLY. No markdown or explanations.
-- For each biomarker, extract: biomarker_name, value, unit, reference_min, reference_max, status ("low" | "normal" | "high"), test_date.
-- If a value is missing, use `null`. Do not guess."""
+LAB_EXTRACTION_SYSTEM_PROMPT = (
+    "Lab report extraction agent. Extract biomarkers from OCR text into JSON. "
+    "Rules: RAW JSON only—no markdown, no explanation. "
+    "Per biomarker: biomarker_name, value, unit, reference_min, reference_max, "
+    "status (low|normal|high), test_date. Missing values: null."
+)
 
 
 # ---------------------------------------------------------------------------

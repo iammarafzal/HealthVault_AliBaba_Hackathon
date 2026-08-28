@@ -26,14 +26,9 @@ logger = logging.getLogger("healthvault")
 # System prompt per AGENT_PROMPTS.md §2 — AI Doctor Summary Agent
 # ---------------------------------------------------------------------------
 _SUMMARY_SYSTEM_PROMPT = (
-    "You are a Chief Medical Officer summarizing a patient's entire historical health record. "
-    "Synthesize the provided database records into a concise, highly readable 1-page clinical "
-    "summary designed for a doctor who has exactly 10 seconds to review it. "
-    "Constraints: "
-    "- Group current active medications together. "
-    "- Highlight severe allergies or abnormal lab biomarkers prominently. "
-    "- Output strictly in JSON matching the provided schema. "
-    "Do NOT output any markdown formatting, conversational text, or explanations. RAW JSON ONLY."
+    "Chief Medical Officer generating a 10-second clinical patient summary. "
+    "Synthesize records into JSON. Group active medications; highlight severe "
+    "allergies and abnormal biomarkers. RAW JSON only—no markdown, no explanation."
 )
 
 
@@ -128,25 +123,14 @@ class SummaryAgent:
             default=str,
         )
 
-        # 4. Build user prompt per AGENT_PROMPTS.md template -----------------
+        # 4. Build user prompt — compact context, no redundant schema re-statement
         user_prompt = (
-            f"Patient Profile: {patient_json}\n"
-            f"Historical Records: {vault_records_json}\n"
-            f"Recent Lab Biomarkers: {biomarkers_json}\n\n"
-            "Expected JSON Structure:\n"
-            "{\n"
-            '  "patient_name": "string",\n'
-            '  "health_id": "string",\n'
-            '  "age_gender": "string",\n'
-            '  "blood_group": "string",\n'
-            '  "active_diagnoses": ["string"],\n'
-            '  "current_medications": ["string (Name - Dosage)"],\n'
-            '  "known_allergies": ["string (Allergen - Severity)"],\n'
-            '  "surgical_history": ["string"],\n'
-            '  "recent_abnormal_biomarkers": ["string (Biomarker: Value - Status)"],\n'
-            '  "risk_factors": ["string"],\n'
-            '  "clinical_notes": "string (1 paragraph executive summary)"\n'
-            "}"
+            f"Patient: {patient_json}\n"
+            f"Records: {vault_records_json}\n"
+            f"Abnormal Biomarkers: {biomarkers_json}\n"
+            "Output JSON with keys: patient_name, health_id, age_gender, blood_group, "
+            "active_diagnoses, current_medications, known_allergies, surgical_history, "
+            "recent_abnormal_biomarkers, risk_factors, clinical_notes."
         )
 
         # 5. Invoke LLM provider ---------------------------------------------

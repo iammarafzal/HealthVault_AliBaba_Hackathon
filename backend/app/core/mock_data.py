@@ -186,3 +186,137 @@ def get_mock_user_records(user_id: uuid.UUID) -> List[MedicalRecordResponse]:
             created_at=datetime.now(timezone.utc),
         ),
     ]
+
+
+# ---------------------------------------------------------------------------
+# 7. Mock Voice Intent Resolutions (bilingual EN/UR)
+#    Used by MockLLMProvider when prompt matches voice-intent keywords.
+# ---------------------------------------------------------------------------
+
+MOCK_VOICE_MEDICATION_SCHEDULE: dict = {
+    "intent": "medication_schedule",
+    "entities_detected": {
+        "medications_mentioned": ["Metformin", "Amlodipine"],
+        "symptoms_mentioned": [],
+        "dosages_mentioned": [],
+    },
+    "answer_en": (
+        "Based on your records, you are prescribed Metformin 500mg twice daily "
+        "after meals (morning and night) and Amlodipine 5mg once daily in the "
+        "morning. Please follow this schedule consistently. "
+        "Disclaimer: This is informational only and not a substitute for "
+        "professional medical advice."
+    ),
+    "answer_ur": (
+        "آپ کے طبی ریکارڈ کے مطابق آپ کو میٹفارمین 500 ملی گرام دن میں دو بار "
+        "کھانے کے بعد (صبح اور رات) اور ایملوڈیپین 5 ملی گرام روزانہ صبح لینے "
+        "کی ہدایت ہے۔ اس شیڈول کی پابندی کریں۔ "
+        "نوٹ: یہ صرف معلوماتی ہے اور پیشہ ورانہ طبی مشورے کا متبادل نہیں ہے۔"
+    ),
+    "requires_emergency_care": False,
+    "confidence": 0.95,
+}
+
+MOCK_VOICE_DOSAGE_INQUIRY: dict = {
+    "intent": "dosage_inquiry",
+    "entities_detected": {
+        "medications_mentioned": ["Metformin"],
+        "symptoms_mentioned": [],
+        "dosages_mentioned": ["500mg"],
+    },
+    "answer_en": (
+        "Your prescribed dosage for Metformin is 500mg, taken twice daily after "
+        "meals with water. Do not exceed this dose without consulting your doctor. "
+        "Disclaimer: This is informational only."
+    ),
+    "answer_ur": (
+        "میٹفارمین کی آپ کی تجویز کردہ خوراک 500 ملی گرام ہے، جو دن میں دو بار "
+        "کھانے کے بعد پانی کے ساتھ لینی ہے۔ اپنے ڈاکٹر سے مشورہ کیے بغیر خوراک "
+        "زیادہ نہ کریں۔ نوٹ: یہ صرف معلوماتی ہے۔"
+    ),
+    "requires_emergency_care": False,
+    "confidence": 0.93,
+}
+
+MOCK_VOICE_SYMPTOM_TRIAGE: dict = {
+    "intent": "symptom_triage",
+    "entities_detected": {
+        "medications_mentioned": [],
+        "symptoms_mentioned": ["headache", "dizziness"],
+        "dosages_mentioned": [],
+    },
+    "answer_en": (
+        "You reported headache and dizziness. Given your history of hypertension "
+        "and diabetes, these symptoms may relate to blood pressure fluctuations "
+        "or blood sugar levels. Please monitor your vitals and consult your "
+        "doctor if symptoms persist. "
+        "Disclaimer: This is informational only and not a substitute for "
+        "professional medical care."
+    ),
+    "answer_ur": (
+        "آپ نے سر درد اور چکر کی شکایت کی ہے۔ آپ کے ہائی بلڈ پریشر اور ذیابیطس "
+        "کے سابقے کو دیکھتے ہوئے، یہ علامات بلڈ پریشر یا بلڈ شوگر کی تبدیلی سے "
+        "متعلق ہو سکتی ہیں۔ براہ کرم اپنی علامات کی نگرانی کریں اور جاری رہنے "
+        "کی صورت میں اپنے ڈاکٹر سے رجوع کریں۔ "
+        "نوٹ: یہ صرف معلوماتی ہے اور پیشہ ورانہ طبی دیکھ بھال کا متبادل نہیں ہے۔"
+    ),
+    "requires_emergency_care": False,
+    "confidence": 0.88,
+}
+
+MOCK_VOICE_EMERGENCY_SOS: dict = {
+    "intent": "emergency_sos",
+    "entities_detected": {
+        "medications_mentioned": [],
+        "symptoms_mentioned": ["chest pain"],
+        "dosages_mentioned": [],
+    },
+    "answer_en": (
+        "This appears to be a medical emergency. Please call emergency services "
+        "(1122 in Pakistan) or go to the nearest hospital immediately. Do not "
+        "delay. This is not a substitute for professional medical care."
+    ),
+    "answer_ur": (
+        "یہ ایک طبی ہنگامی صورتحال لگ رہی ہے۔ براہ کرم فوری طور پر ایمبولینس "
+        "(پاکستان میں 1122) کو کال کریں یا قریب ترین ہسپتال جائیں۔ دیر نہ کریں۔ "
+        "یہ پیشہ ورانہ طبی دیکھ بھال کا متبادل نہیں ہے۔"
+    ),
+    "requires_emergency_care": True,
+    "confidence": 0.95,
+}
+
+MOCK_VOICE_GENERAL_INQUIRY: dict = {
+    "intent": "general_inquiry",
+    "entities_detected": {},
+    "answer_en": (
+        "Thank you for your query. Based on your health records, I recommend "
+        "consulting your doctor for personalized advice. This is informational "
+        "only and not a substitute for professional medical consultation."
+    ),
+    "answer_ur": (
+        "آپ کی سوال کا شکریہ۔ آپ کے طبی ریکارڈ کی بنیاد پر، میں ذاتی مشورے کے "
+        "لیے اپنے ڈاکٹر سے رجوع کرنے کی تجویز دیتا ہوں۔ یہ صرف معلوماتی ہے اور "
+        "پیشہ ورانہ طبی مشورے کا متبادل نہیں ہے۔"
+    ),
+    "requires_emergency_care": False,
+    "confidence": 0.75,
+}
+
+# Aggregate lookup for MockLLMProvider voice-intent routing
+MOCK_VOICE_INTENT_MAP: dict = {
+    "medication_schedule": MOCK_VOICE_MEDICATION_SCHEDULE,
+    "dosage_inquiry": MOCK_VOICE_DOSAGE_INQUIRY,
+    "symptom_triage": MOCK_VOICE_SYMPTOM_TRIAGE,
+    "emergency_sos": MOCK_VOICE_EMERGENCY_SOS,
+    "general_inquiry": MOCK_VOICE_GENERAL_INQUIRY,
+}
+
+
+# ---------------------------------------------------------------------------
+# 8. Mock Interaction Check — safe (no conflicts)
+# ---------------------------------------------------------------------------
+
+MOCK_INTERACTION_NO_CONFLICT: dict = {
+    "has_conflicts": False,
+    "alerts": [],
+}

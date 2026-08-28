@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # Feature Flags
     USE_MOCK: bool = False
 
+    # LLM Latency & Resilience
+    LLM_TIMEOUT_SECONDS: float = 15.0
+
     # OCR — PaddleOCR pipeline
     OCR_USE_GPU: bool = False
     OCR_LANG: str = "en"

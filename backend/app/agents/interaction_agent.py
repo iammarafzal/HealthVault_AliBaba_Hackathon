@@ -20,15 +20,11 @@ logger = logging.getLogger("healthvault")
 # System prompt per AGENT_PROMPTS.md §3 — Drug Interaction & Allergy Guard
 # ---------------------------------------------------------------------------
 _INTERACTION_SYSTEM_PROMPT = (
-    "You are a strict clinical pharmacology safety agent. "
-    "Cross-reference newly prescribed medications against the patient's existing active "
-    "medications and known allergies to identify dangerous interactions. "
-    "Constraints: "
-    "- Only flag moderate or critical interactions. Ignore minor dietary warnings unless severe. "
-    "- Provide a clear recommendation in both plain English and conversational Urdu. "
-    "- If no conflicts exist, set has_conflicts to false and alerts to an empty array. "
-    "Output strictly in JSON matching the provided schema. "
-    "Do NOT output any markdown formatting, conversational text, or explanations. RAW JSON ONLY."
+    "Clinical pharmacology safety agent. Cross-reference new medications against "
+    "active medications and allergies. Flag only moderate/critical interactions. "
+    "Provide bilingual recommendations (EN + UR). "
+    "If no conflicts: has_conflicts=false, alerts=[]. "
+    "RAW JSON only—no markdown, no explanation."
 )
 
 
@@ -78,24 +74,13 @@ class DrugInteractionAgent:
             f"{m.name} {m.dosage} ({m.frequency})" for m in active_meds
         ] or ["None"]
 
-        # 3. Construct user prompt per AGENT_PROMPTS.md template -------------
+        # 3. Construct user prompt — compact context + key list
         user_prompt = (
-            f"Patient Allergies: {json.dumps(allergies_list)}\n"
+            f"Allergies: {json.dumps(allergies_list)}\n"
             f"Active Medications: {json.dumps(active_meds_list)}\n"
-            f"Newly Prescribed Medications: {json.dumps(new_medications)}\n\n"
-            "Expected JSON Structure:\n"
-            "{\n"
-            '  "has_conflicts": true/false,\n'
-            '  "alerts": [\n'
-            "    {\n"
-            '      "severity": "medium | critical",\n'
-            '      "interacting_drugs": ["Drug A", "Drug B"],\n'
-            '      "clinical_risk": "string (Medical explanation)",\n'
-            '      "recommendation_en": "string (Actionable advice)",\n'
-            '      "recommendation_ur": "string (Urdu translation)"\n'
-            "    }\n"
-            "  ]\n"
-            "}"
+            f"Newly Prescribed: {json.dumps(new_medications)}\n"
+            "Output JSON with keys: has_conflicts (bool), alerts[] with: "
+            "severity, interacting_drugs, clinical_risk, recommendation_en, recommendation_ur."
         )
 
         # 4. Invoke LLM provider ---------------------------------------------

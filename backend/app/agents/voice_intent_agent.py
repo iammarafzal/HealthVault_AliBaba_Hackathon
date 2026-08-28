@@ -45,43 +45,20 @@ _VALID_INTENTS = {
     "general_inquiry",
 }
 
-# System prompt per AGENT_PROMPTS.md §4 (extended for expanded intents)
+# System prompt — token-optimised for single-pass JSON output
 _SYSTEM_PROMPT = """\
-You are a bilingual (Urdu/English) medical assistant agent for HealthVault AI.
+Bilingual (Urdu/English) medical intent agent for HealthVault AI.
 
-**Role:** Analyze the patient's voice query, determine their intent, and generate \
-a helpful, conversational response grounded in their actual medical history.
+Classify intent (choose ONE): medication_schedule | dosage_inquiry | symptom_triage | emergency_sos | general_inquiry.
 
-**Intent Classification — choose exactly ONE:**
-- `medication_schedule`: When to take medications, timing, routine queries.
-- `dosage_inquiry`: How much to take, dosage amounts, frequency questions.
-- `symptom_triage`: Evaluating symptoms against the patient's history.
-- `emergency_sos`: Critical/life-threatening symptoms requiring immediate care.
-- `general_inquiry`: Any other health-related question.
+Rules:
+- Ground answers in the patient's medical context provided.
+- Emergency symptoms → intent=emergency_sos, requires_emergency_care=true.
+- Provide answers in BOTH English (answer_en) and Urdu Nastaliq (answer_ur).
+- Include medical disclaimer in both answers.
+- RAW JSON only. No markdown, no explanation.
 
-**Constraints:**
-- You MUST ground your answer in the patient's provided medical context.
-- If the query indicates a medical emergency, set intent to `emergency_sos` and \
-  `requires_emergency_care` to true.
-- Provide answers in BOTH English (`answer_en`) and natural conversational Urdu \
-  in Nastaliq script (`answer_ur`).
-- Include a medical disclaimer: answers are informational, not a substitute for \
-  professional medical advice.
-- Output RAW JSON ONLY. No markdown, no explanations.
-
-**Expected JSON Structure:**
-{
-  "intent": "medication_schedule | dosage_inquiry | symptom_triage | emergency_sos | general_inquiry",
-  "entities_detected": {
-    "medications_mentioned": ["string"],
-    "symptoms_mentioned": ["string"],
-    "dosages_mentioned": ["string"]
-  },
-  "answer_en": "string (Helpful English answer with disclaimer)",
-  "answer_ur": "string (Helpful Urdu answer in Nastaliq script with disclaimer)",
-  "requires_emergency_care": true/false,
-  "confidence": 0.0-1.0
-}
+JSON keys: intent, entities_detected{medications_mentioned,symptoms_mentioned,dosages_mentioned}, answer_en, answer_ur, requires_emergency_care (bool), confidence (0-1).
 """
 
 
@@ -134,10 +111,10 @@ class VoiceIntentAgent:
         # 2. Pre-check: emergency keyword triage -----------------------------------
         pre_emergency = _has_emergency_keywords(query_text)
 
-        # 3. Build user prompt -----------------------------------------------------
+        # 3. Build user prompt — compact context + query
         user_prompt = (
-            f"Patient Context:\n{patient_context}\n\n"
-            f"Voice Query: \"{query_text}\"\n"
+            f"Patient Context: {patient_context}\n"
+            f"Voice Query: \"{query_text}\""
         )
 
         # 4. Invoke LLM provider ---------------------------------------------------
@@ -218,7 +195,7 @@ def _build_patient_context_json(
         ],
         "past_diagnoses": diagnoses,
     }
-    return json.dumps(context, ensure_ascii=False, indent=2)
+    return json.dumps(context, ensure_ascii=False)
 
 
 def _parse_llm_response(
