@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import {
   Activity,
   Bell,
-  Check,
   Clock,
   LogOut,
+  Menu,
   Moon,
   Settings,
   ShieldAlert,
@@ -53,7 +53,12 @@ const notifications = [
   },
 ];
 
-export default function Navbar() {
+interface NavbarProps {
+  onMenuClick?: () => void;
+  showMobileMenu?: boolean;
+}
+
+export default function Navbar({ onMenuClick, showMobileMenu }: NavbarProps) {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -65,6 +70,18 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6">
+      {/* Mobile hamburger */}
+      {showMobileMenu && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-11 w-11 shrink-0 md:hidden"
+          onClick={onMenuClick}
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+      )}
+
       {/* Branding */}
       <Link href="/" className="flex items-center gap-2">
         <Activity className="h-6 w-6 text-primary" />
