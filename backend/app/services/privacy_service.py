@@ -200,6 +200,7 @@ class PrivacyFilterService:
 
         # Generate a collision-free health_id
         new_health_id = await PrivacyFilterService._generate_unique_health_id(db)
+        old_health_id = user.health_id  # Preserve before overwrite for audit log
         user.health_id = new_health_id
 
         # Reset revocation so the new QR is immediately usable
@@ -210,7 +211,7 @@ class PrivacyFilterService:
         logger.info(
             "Regenerated health_id for user %s: %s → %s",
             user_id,
-            user.health_id,
+            old_health_id,
             new_health_id,
         )
 

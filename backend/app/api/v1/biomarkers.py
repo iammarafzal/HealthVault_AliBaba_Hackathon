@@ -27,6 +27,10 @@ async def get_biomarker_timeline(
         None,
         description="Optional biomarker name filter (e.g. HbA1c, Cholesterol, Hemoglobin)",
     ),
+    metric: Optional[str] = Query(
+        None,
+        description="Single biomarker name alias (API_CONTRACTS §6 compatibility)",
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> BiomarkerTimelineResponse:
     """Return aggregated, chronologically ordered biomarker series.
@@ -34,12 +38,20 @@ async def get_biomarker_timeline(
     Supports optional filtering by biomarker name (case-insensitive,
     alias-aware).  Each series includes trend analysis
     (improving / worsening / stable).
+
+    The ``metric`` query parameter is accepted as a convenience alias
+    for specifying a single biomarker name (API_CONTRACTS §6).
     """
+    # Merge metric into biomarkers list for unified downstream handling
+    effective_names = list(biomarkers) if biomarkers else []
+    if metric and metric not in effective_names:
+        effective_names.append(metric)
+
     try:
         return await BiomarkerService.get_biomarker_timeline(
             db=db,
             user_id=user_id,
-            biomarker_names=biomarkers,
+            biomarker_names=effective_names or None,
         )
     except Exception as exc:
         raise HTTPException(

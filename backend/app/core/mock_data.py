@@ -91,7 +91,7 @@ MOCK_LAB_EXTRACTION = ExtractionResponse(
 # 3. Mock Doctor 30-Second Summary
 MOCK_DOCTOR_SUMMARY = DoctorSummaryResponse(
     patient_name="Ahmad Raza",
-    health_id="HV-98214",
+    health_id="HV-PAK-98214",
     age_gender="54M",
     blood_group="B+",
     active_diagnoses=[
@@ -145,7 +145,7 @@ MOCK_INTERACTION_ALERT = InteractionCheckResponse(
 
 # 5. Mock Emergency Profile Response (Zero-Login Public Access)
 MOCK_EMERGENCY_PROFILE = EmergencyProfileResponse(
-    health_id="HV-98214",
+    health_id="HV-PAK-98214",
     full_name="Ahmad Raza",
     blood_group="B+",
     critical_allergies=["Penicillin (Severe)"],
@@ -294,7 +294,7 @@ MOCK_VOICE_GENERAL_INQUIRY: dict = {
         "only and not a substitute for professional medical consultation."
     ),
     "answer_ur": (
-        "آپ کی سوال کا شکریہ۔ آپ کے طبی ریکارڈ کی بنیاد پر، میں ذاتی مشورے کے "
+        "آپ کے سوال کا شکریہ۔ آپ کے طبی ریکارڈ کی بنیاد پر، میں ذاتی مشورے کے "
         "لیے اپنے ڈاکٹر سے رجوع کرنے کی تجویز دیتا ہوں۔ یہ صرف معلوماتی ہے اور "
         "پیشہ ورانہ طبی مشورے کا متبادل نہیں ہے۔"
     ),

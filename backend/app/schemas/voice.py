@@ -33,13 +33,31 @@ class VoiceTranscriptionResponse(BaseModel):
 
 
 class VoiceIntentRequest(BaseModel):
-    """Request body for the voice intent-resolution endpoint."""
+    """Request body for the voice intent-resolution endpoint.
+
+    Accepts both the documented VoiceQueryRequest fields (text_prompt)
+    and the native VoiceIntentRequest fields (query_text) for backward
+    compatibility.
+    """
     user_id: UUID
-    query_text: str = Field(
-        ...,
+    query_text: Optional[str] = Field(
+        None,
         examples=["میری میٹفارمین کی دوائی کب لینی چاہیے"],
     )
+    text_prompt: Optional[str] = Field(
+        None,
+        description="Alias for query_text (API_CONTRACTS §7 VoiceQueryRequest compatibility)",
+    )
+    audio_base64: Optional[str] = Field(
+        None,
+        description="Base64-encoded audio (API_CONTRACTS §7 VoiceQueryRequest compatibility)",
+    )
     language_hint: Optional[str] = Field(default="ur", examples=["ur", "en"])
+
+    @property
+    def resolved_query(self) -> str:
+        """Return whichever text field is populated (query_text or text_prompt)."""
+        return self.query_text or self.text_prompt or ""
 
 
 class VoiceIntentResponse(BaseModel):

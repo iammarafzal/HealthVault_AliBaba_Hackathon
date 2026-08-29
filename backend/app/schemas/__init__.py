@@ -14,6 +14,7 @@ from app.schemas.user import (  # noqa: F401
 )
 from app.schemas.vault import (  # noqa: F401
     ExtractedAllergy,
+    ExtractedDocumentEntities,
     ExtractedMedication,
     ExtractionResponse,
     MedicalRecordBase,
@@ -52,6 +53,7 @@ __all__ = [
     "UserResponse",
     # Vault
     "ExtractedAllergy",
+    "ExtractedDocumentEntities",
     "ExtractedMedication",
     "ExtractionResponse",
     "MedicalRecordBase",

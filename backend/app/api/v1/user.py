@@ -10,15 +10,41 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.models.user import User
 from app.schemas.user import (
     PrivacySettingsResponse,
     PrivacySettingsUpdate,
     QRRegenerateRequest,
     QRRegenerateResponse,
+    UserResponse,
 )
 from app.services.privacy_service import PrivacyFilterService
+from sqlalchemy import select
 
 router = APIRouter(prefix="/user", tags=["User"])
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/user/profile?user_id=<uuid>
+# ---------------------------------------------------------------------------
+@router.get(
+    "/profile",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get user profile by user_id",
+)
+async def get_user_profile(
+    user_id: UUID = Query(..., description="UUID of the user"),
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    """Retrieve full profile for the given user_id."""
+    user = await db.scalar(select(User).where(User.id == user_id))
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+    return UserResponse.model_validate(user)
 
 
 # ---------------------------------------------------------------------------

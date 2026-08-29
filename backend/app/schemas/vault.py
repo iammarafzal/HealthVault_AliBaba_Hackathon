@@ -24,6 +24,21 @@ class ExtractedAllergy(BaseModel):
     reaction_details: Optional[str] = None
 
 
+class ExtractedDocumentEntities(BaseModel):
+    """Schema for validating raw LLM extraction output in the validation_node.
+
+    Unlike ExtractionResponse, this does NOT require DB-generated fields
+    (record_id, raw_ocr_text) — it validates only the fields the LLM produces.
+    """
+    document_type: Optional[str] = None
+    doctor_name: Optional[str] = None
+    hospital_name: Optional[str] = None
+    consultation_date: Optional[date] = None
+    diagnoses: List[str] = []
+    medications: List[ExtractedMedication] = []
+    allergies: List[ExtractedAllergy] = []
+
+
 class ExtractionResponse(BaseModel):
     record_id: UUID
     document_type: str  # "prescription" | "lab_report" | "discharge_summary"

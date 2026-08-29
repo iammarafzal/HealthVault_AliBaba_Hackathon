@@ -65,16 +65,26 @@ async def resolve_voice_query(
     diagnoses from PostgreSQL, then invokes the LLM provider to generate
     context-grounded responses in English and Urdu.
 
+    Accepts both ``query_text`` (native) and ``text_prompt``
+    (API_CONTRACTS §7 VoiceQueryRequest) as the query text field.
+
     Safety triage: if emergency keywords are detected, the response is
     overridden to ``emergency_sos`` with ``requires_emergency_care=True``.
     """
     from app.agents.voice_intent_agent import VoiceIntentAgent
 
+    query_text = body.resolved_query
+    if not query_text:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Either 'query_text' or 'text_prompt' must be provided.",
+        )
+
     try:
         return await VoiceIntentAgent.resolve_intent(
             db=db,
             user_id=body.user_id,
-            query_text=body.query_text,
+            query_text=query_text,
         )
     except ValueError as exc:
         raise HTTPException(

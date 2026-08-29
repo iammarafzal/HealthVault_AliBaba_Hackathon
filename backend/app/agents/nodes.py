@@ -7,7 +7,7 @@ from typing import Any, Dict
 from pydantic import ValidationError
 
 from app.agents.state import MedicalAgentState
-from app.schemas.vault import ExtractionResponse
+from app.schemas.vault import ExtractedDocumentEntities
 from app.services.llm_provider import get_llm_provider
 
 logger = logging.getLogger("healthvault")
@@ -118,7 +118,11 @@ async def clinical_summary_extraction_node(state: MedicalAgentState) -> Dict[str
 
 
 def validation_node(state: MedicalAgentState) -> Dict[str, Any]:
-    """Validate extracted_entities against the ExtractionResponse Pydantic schema."""
+    """Validate extracted_entities against the ExtractedDocumentEntities Pydantic schema.
+
+    Uses a dedicated LLM-output schema that does NOT require DB-generated fields
+    (record_id, raw_ocr_text), avoiding false-positive ValidationErrors.
+    """
     entities = state.get("extracted_entities", {})
     errors = list(state.get("errors", []))
 
@@ -127,8 +131,8 @@ def validation_node(state: MedicalAgentState) -> Dict[str, Any]:
         return {"errors": errors}
 
     try:
-        # Validate against the schema (Pydantic v2)
-        ExtractionResponse.model_validate(entities)
+        # Validate against the LLM-output schema (Pydantic v2)
+        ExtractedDocumentEntities.model_validate(entities)
         logger.info("Validation passed for extracted entities")
         return {"errors": errors}  # No new errors
     except ValidationError as exc:

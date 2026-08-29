@@ -169,17 +169,15 @@ async def upload_and_extract(
 )
 async def get_user_records(
     user_id: UUID,
+    db: AsyncSession = Depends(get_db),
 ) -> List[MedicalRecordResponse]:
     """Retrieve uploaded records with extracted metadata for a given user."""
     if settings.USE_MOCK:
         return get_mock_user_records(user_id)
 
-    from app.core.database import async_session_factory
-
-    async with async_session_factory() as session:
-        query = select(MedicalRecord).where(MedicalRecord.user_id == user_id).order_by(
-            MedicalRecord.created_at.desc()
-        )
-        result = await session.execute(query)
-        records = result.scalars().all()
-        return [MedicalRecordResponse.model_validate(r) for r in records]
+    query = select(MedicalRecord).where(MedicalRecord.user_id == user_id).order_by(
+        MedicalRecord.created_at.desc()
+    )
+    result = await db.execute(query)
+    records = result.scalars().all()
+    return [MedicalRecordResponse.model_validate(r) for r in records]

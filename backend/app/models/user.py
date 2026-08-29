@@ -42,6 +42,9 @@ class User(Base):
         String(255), unique=True, nullable=True
     )
     phone: Mapped[str] = mapped_column(String(32), nullable=False)
+    hashed_password: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )
     role: Mapped[str] = mapped_column(
         String(20), nullable=False, default="patient", server_default="patient"
     )

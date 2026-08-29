@@ -3,6 +3,7 @@
 
 from fastapi import APIRouter
 
+from app.api.v1.auth import router as auth_router
 from app.api.v1.biomarkers import router as biomarkers_router
 from app.api.v1.emergency import router as emergency_router
 from app.api.v1.interactions import router as interactions_router
@@ -14,6 +15,7 @@ from app.api.v1.voice import router as voice_router
 api_router = APIRouter()
 
 # Register v1 feature routers
+api_router.include_router(auth_router)
 api_router.include_router(vault_router)
 api_router.include_router(summary_router)
 api_router.include_router(interactions_router)
