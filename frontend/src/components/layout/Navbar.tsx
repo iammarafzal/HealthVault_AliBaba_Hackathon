@@ -130,7 +130,10 @@ export default function Navbar() {
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer justify-center text-center text-sm text-primary">
+            <DropdownMenuItem
+              className="cursor-pointer justify-center text-center text-sm text-primary"
+              onClick={() => router.push("/notifications")}
+            >
               View all notifications
             </DropdownMenuItem>
           </DropdownMenuContent>

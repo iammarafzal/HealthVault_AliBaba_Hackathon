@@ -62,3 +62,12 @@ export interface BiomarkerTimeline {
   timeline: BiomarkerDataPoint[];
   summary_insight: string;
 }
+
+export interface PrivacySettings {
+  show_blood_group: boolean;
+  show_allergies: boolean;
+  show_active_meds: boolean;
+  show_emergency_contacts: boolean;
+  show_chronic_conditions: boolean;
+  qr_revoked: boolean;
+}

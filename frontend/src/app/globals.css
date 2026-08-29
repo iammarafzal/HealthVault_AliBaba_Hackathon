@@ -86,13 +86,14 @@
   scrollbar-color: hsl(var(--muted-foreground) / 0.3) hsl(var(--muted));
 }
 
-/* ── Print styles for 1-page Doctor Summary ─────────────────── */
+/* ── Print styles ──────────────────────────────────────────── */
 @media print {
-  /* Hide everything except the print container */
+  /* Hide everything by default */
   body * {
     visibility: hidden;
   }
 
+  /* ── Doctor Summary print ─────────────────────────────── */
   .summary-print-container,
   .summary-print-container * {
     visibility: visible;
@@ -112,6 +113,25 @@
     background: #fff;
   }
 
+  /* ── Emergency Card print ─────────────────────────────── */
+  .emergency-card-container,
+  .emergency-card-container * {
+    visibility: visible;
+  }
+
+  .emergency-card-container {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 380px;
+    border: 2px solid #ccc !important;
+    box-shadow: none !important;
+    border-radius: 12px;
+    background: #fff !important;
+    overflow: hidden;
+  }
+
   /* Hide print-hidden elements (back buttons, etc.) */
   .print\:hidden {
     display: none !important;
@@ -119,7 +139,9 @@
 
   /* Remove borders/shadows for clean print */
   .summary-print-container section,
-  .summary-print-container div {
+  .summary-print-container div,
+  .emergency-card-container section,
+  .emergency-card-container div {
     box-shadow: none !important;
   }
 

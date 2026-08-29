@@ -4,34 +4,60 @@ import { useState } from "react";
 import {
   Clock,
   Moon,
-  Pill,
   Sun,
   Sunrise,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
+import MedicationTimeline, {
+  type PlannedMed,
+} from "@/components/planner/MedicationTimeline";
 import { cn } from "@/lib/utils";
 
-interface PlannedMed {
-  name: string;
-  dosage: string;
-  timing: "morning" | "noon" | "night";
-  taken: boolean;
-}
-
-const plannedMeds: PlannedMed[] = [
-  { name: "Metformin", dosage: "500mg", timing: "morning", taken: true },
-  { name: "Amlodipine", dosage: "5mg", timing: "morning", taken: false },
-  { name: "Atorvastatin", dosage: "10mg", timing: "night", taken: false },
-  { name: "Metformin", dosage: "500mg", timing: "night", taken: false },
-  { name: "Omeprazole", dosage: "20mg", timing: "noon", taken: false },
+const initialMeds: PlannedMed[] = [
+  {
+    id: "med-1",
+    name: "Metformin",
+    dosage: "500mg",
+    instruction: "Before breakfast",
+    timing: "morning",
+    taken: false,
+  },
+  {
+    id: "med-2",
+    name: "Amlodipine",
+    dosage: "5mg",
+    instruction: "After breakfast with water",
+    timing: "morning",
+    taken: false,
+  },
+  {
+    id: "med-3",
+    name: "Omeprazole",
+    dosage: "20mg",
+    instruction: "30 minutes after lunch",
+    timing: "noon",
+    taken: false,
+  },
+  {
+    id: "med-4",
+    name: "Metformin",
+    dosage: "500mg",
+    instruction: "With dinner",
+    timing: "night",
+    taken: false,
+  },
+  {
+    id: "med-5",
+    name: "Atorvastatin",
+    dosage: "10mg",
+    instruction: "Before bed",
+    timing: "night",
+    taken: false,
+  },
 ];
 
 const tabs = [
@@ -44,11 +70,11 @@ export default function PlannerPage() {
   const [activeTab, setActiveTab] = useState<"morning" | "noon" | "night">(
     "morning"
   );
-  const [meds, setMeds] = useState(plannedMeds);
+  const [meds, setMeds] = useState<PlannedMed[]>(initialMeds);
 
-  const toggleTaken = (index: number) => {
+  const toggleTaken = (id: string) => {
     setMeds((prev) =>
-      prev.map((m, i) => (i === index ? { ...m, taken: !m.taken } : m))
+      prev.map((m) => (m.id === id ? { ...m, taken: !m.taken } : m))
     );
   };
 
@@ -66,12 +92,10 @@ export default function PlannerPage() {
         </p>
       </div>
 
-      {/* Summary strip */}
+      {/* Progress summary cards */}
       <div className="grid gap-4 sm:grid-cols-3">
         {tabs.map((tab) => {
-          const count = meds.filter(
-            (m) => m.timing === tab.key
-          ).length;
+          const count = meds.filter((m) => m.timing === tab.key).length;
           const taken = meds.filter(
             (m) => m.timing === tab.key && m.taken
           ).length;
@@ -88,6 +112,15 @@ export default function PlannerPage() {
                     {taken}/{count} taken
                   </p>
                 </div>
+                {/* Mini progress bar */}
+                <div className="ml-auto h-2 w-16 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{
+                      width: count > 0 ? `${(taken / count) * 100}%` : "0%",
+                    }}
+                  />
+                </div>
               </CardContent>
             </Card>
           );
@@ -103,7 +136,7 @@ export default function PlannerPage() {
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               className={cn(
-                "flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                "flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors",
                 activeTab === tab.key
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -116,80 +149,11 @@ export default function PlannerPage() {
         })}
       </div>
 
-      {/* Medication list */}
-      <div className="space-y-3">
-        {filtered.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
-              <Pill className="h-8 w-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                No medications scheduled for this time slot.
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          filtered.map((med) => {
-            const globalIndex = meds.indexOf(med);
-            return (
-              <Card key={`${med.name}-${med.timing}`}>
-                <CardContent className="flex items-center gap-4 py-4">
-                  <div
-                    className={cn(
-                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-                      med.taken
-                        ? "bg-emerald-100 dark:bg-emerald-900/30"
-                        : "bg-muted"
-                    )}
-                  >
-                    <Pill
-                      className={cn(
-                        "h-5 w-5",
-                        med.taken
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : "text-muted-foreground"
-                      )}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold">
-                      {med.name}{" "}
-                      <span className="font-normal text-muted-foreground">
-                        {med.dosage}
-                      </span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {med.timing === "morning"
-                        ? "Before breakfast"
-                        : med.timing === "noon"
-                        ? "After lunch"
-                        : "Before bed"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {med.taken ? (
-                      <Badge
-                        variant="secondary"
-                        className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                      >
-                        Taken
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline">Pending</Badge>
-                    )}
-                    <Button
-                      variant={med.taken ? "secondary" : "default"}
-                      size="sm"
-                      onClick={() => toggleTaken(globalIndex)}
-                    >
-                      {med.taken ? "Undo" : "Mark Taken"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })
-        )}
-      </div>
+      {/* Medication timeline for active tab */}
+      <MedicationTimeline
+        medications={filtered}
+        onToggleTaken={toggleTaken}
+      />
 
       {/* Reminder note */}
       <Card className="border-dashed">

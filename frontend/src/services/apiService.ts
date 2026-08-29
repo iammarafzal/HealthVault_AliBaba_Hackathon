@@ -16,6 +16,7 @@ import type {
   BiomarkerTimeline,
   DoctorSummary,
   EmergencyProfile,
+  PrivacySettings,
 } from "@/types/models";
 
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
@@ -116,6 +117,23 @@ export async function getBiomarkers(
     apiClient.get("/biomarkers/timeline", {
       params: { user_id: userId, metric },
     }) as unknown as Promise<BiomarkerTimeline>
+  );
+}
+
+/** Update privacy visibility settings. */
+export async function updatePrivacySettings(
+  settings: Partial<PrivacySettings>
+): Promise<PrivacySettings> {
+  const defaultSettings: PrivacySettings = {
+    show_blood_group: true,
+    show_allergies: true,
+    show_active_meds: true,
+    show_emergency_contacts: true,
+    show_chronic_conditions: true,
+    qr_revoked: false,
+  };
+  return withMockFallback({ ...defaultSettings, ...settings }, () =>
+    apiClient.put("/emergency/privacy", settings) as unknown as Promise<PrivacySettings>
   );
 }
 

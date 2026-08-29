@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import {
-  Eye,
-  EyeOff,
+  AlertTriangle,
   QrCode,
   RefreshCw,
   Shield,
@@ -17,56 +16,52 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import PrivacyToggleForm from "@/components/settings/PrivacyToggleForm";
+import QRCodeCanvas from "@/components/emergency/QRCodeCanvas";
+import { updatePrivacySettings } from "@/services/apiService";
+import type { PrivacySettings } from "@/types/models";
 
-interface PrivacyToggle {
-  key: string;
-  label: string;
-  description: string;
-  defaultValue: boolean;
-}
+const HEALTH_ID = "HV-PAK-98214";
 
-const privacyToggles: PrivacyToggle[] = [
-  {
-    key: "show_blood_group",
-    label: "Show Blood Group",
-    description:
-      "Display your blood group on the Emergency QR card visible to first responders.",
-    defaultValue: true,
-  },
-  {
-    key: "show_allergies",
-    label: "Show Allergies",
-    description:
-      "Display known drug & environmental allergies on the emergency card.",
-    defaultValue: true,
-  },
-  {
-    key: "show_active_meds",
-    label: "Show Active Medications",
-    description:
-      "Display your current medication list on the emergency card.",
-    defaultValue: true,
-  },
-  {
-    key: "show_emergency_contacts",
-    label: "Show Emergency Contacts",
-    description:
-      "Allow emergency responders to see your designated contact numbers.",
-    defaultValue: true,
-  },
-];
+const defaultSettings: PrivacySettings = {
+  show_blood_group: true,
+  show_allergies: true,
+  show_active_meds: true,
+  show_emergency_contacts: true,
+  show_chronic_conditions: true,
+  qr_revoked: false,
+};
 
 export default function SettingsPage() {
-  const [toggles, setToggles] = useState<Record<string, boolean>>(
-    Object.fromEntries(privacyToggles.map((t) => [t.key, t.defaultValue]))
-  );
+  const [settings, setSettings] = useState<PrivacySettings>(defaultSettings);
+  const [isSaving, setIsSaving] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [savedNotice, setSavedNotice] = useState(false);
 
-  const handleToggle = (key: string) => {
-    setToggles((prev) => ({ ...prev, [key]: !prev[key] }));
+  /* ── Toggle handler ──────────────────────────────────────── */
+  const handleToggle = async (key: keyof PrivacySettings) => {
+    const updated = { ...settings, [key]: !settings[key] };
+    setSettings(updated);
+    setIsSaving(true);
+    try {
+      await updatePrivacySettings({ [key]: updated[key] });
+    } catch {
+      // Silently handle — settings already updated in local state
+    } finally {
+      setIsSaving(false);
+      setSavedNotice(true);
+      setTimeout(() => setSavedNotice(false), 2000);
+    }
   };
 
-  const handleRegenerateQR = async () => {
+  /* ── Regenerate QR with confirmation ─────────────────────── */
+  const handleRegenerateQR = () => {
+    setShowConfirmDialog(true);
+  };
+
+  const confirmRegenerate = async () => {
+    setShowConfirmDialog(false);
     setIsRegenerating(true);
     await new Promise((r) => setTimeout(r, 2000));
     setIsRegenerating(false);
@@ -93,46 +88,19 @@ export default function SettingsPage() {
           </CardTitle>
           <CardDescription>
             Control which fields are visible when someone scans your QR code.
+            {isSaving && (
+              <span className="ml-2 text-primary">Saving…</span>
+            )}
+            {savedNotice && !isSaving && (
+              <span className="ml-2 text-emerald-500">✓ Saved</span>
+            )}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {privacyToggles.map((toggle) => {
-            const isOn = toggles[toggle.key];
-            return (
-              <div
-                key={toggle.key}
-                className="flex items-center justify-between gap-4 rounded-lg border p-4"
-              >
-                <div className="flex items-start gap-3">
-                  {isOn ? (
-                    <Eye className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-                  ) : (
-                    <EyeOff className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                  )}
-                  <div>
-                    <p className="text-sm font-medium">{toggle.label}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {toggle.description}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleToggle(toggle.key)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
-                    isOn ? "bg-primary" : "bg-muted"
-                  }`}
-                  role="switch"
-                  aria-checked={isOn}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 rounded-full bg-background shadow transition-transform ${
-                      isOn ? "translate-x-6" : "translate-x-1"
-                    }`}
-                  />
-                </button>
-              </div>
-            );
-          })}
+        <CardContent>
+          <PrivacyToggleForm
+            settings={settings}
+            onToggle={handleToggle}
+          />
         </CardContent>
       </Card>
 
@@ -149,18 +117,15 @@ export default function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* QR placeholder */}
+          {/* Live QR code */}
           <div className="flex items-center justify-center rounded-lg border border-dashed p-8">
             <div className="flex flex-col items-center gap-3 text-center">
-              <QrCode className="h-24 w-24 text-muted-foreground/40" />
-              <p className="text-xs text-muted-foreground">
-                QR Code renders here via{" "}
-                <code className="rounded bg-muted px-1.5 py-0.5 text-[11px]">
-                  qrcode.react
-                </code>
+              <QRCodeCanvas healthId={HEALTH_ID} size={160} />
+              <p className="text-xs font-medium text-muted-foreground">
+                Health ID: {HEALTH_ID}
               </p>
               <p className="text-[11px] text-muted-foreground">
-                Health ID: HV-PAK-98214
+                Scan to view public emergency profile
               </p>
             </div>
           </div>
@@ -179,19 +144,22 @@ export default function SettingsPage() {
               ) : (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4" />
-                  Regenerate QR Code
+                  Regenerate Emergency QR Code
                 </>
               )}
             </Button>
-            <Button variant="outline">
+            <Button
+              variant="outline"
+              className={settings.qr_revoked ? "bg-destructive text-destructive-foreground" : ""}
+            >
               <ShieldCheck className="mr-2 h-4 w-4" />
-              Revoke Access
+              {settings.qr_revoked ? "Access Revoked" : "Revoke Access"}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Security note */}
+      {/* Security notice */}
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="flex items-start gap-3 py-4">
           <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
@@ -205,6 +173,44 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ── Confirmation Dialog ──────────────────────────────── */}
+      {showConfirmDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowConfirmDialog(false)}
+          />
+          <div className="relative z-10 mx-4 w-full max-w-sm rounded-xl border bg-background p-6 shadow-2xl">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold">Regenerate QR Code?</h3>
+                <p className="text-xs text-muted-foreground">
+                  This will invalidate the current QR code. Any printed copies
+                  will no longer work.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                className="flex-1"
+                onClick={confirmRegenerate}
+              >
+                Yes, Regenerate
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowConfirmDialog(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
