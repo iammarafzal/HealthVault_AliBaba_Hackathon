@@ -85,3 +85,53 @@
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--muted-foreground) / 0.3) hsl(var(--muted));
 }
+
+/* ── Print styles for 1-page Doctor Summary ─────────────────── */
+@media print {
+  /* Hide everything except the print container */
+  body * {
+    visibility: hidden;
+  }
+
+  .summary-print-container,
+  .summary-print-container * {
+    visibility: visible;
+  }
+
+  .summary-print-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: 100%;
+    padding: 16px;
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #000;
+    background: #fff;
+  }
+
+  /* Hide print-hidden elements (back buttons, etc.) */
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Remove borders/shadows for clean print */
+  .summary-print-container section,
+  .summary-print-container div {
+    box-shadow: none !important;
+  }
+
+  /* Force single page — prevent overflow */
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+
+  /* Ensure no page breaks inside sections */
+  .summary-print-container section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

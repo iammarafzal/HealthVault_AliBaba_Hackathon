@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import {
   CheckCircle,
   FileText,
+  Loader2,
   UploadCloud,
   X,
 } from "lucide-react";
@@ -25,6 +26,25 @@ const ACCEPTED_TYPES = [
 ] as const;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
+type ProcessingStage =
+  | "idle"
+  | "uploading"
+  | "ocr_processing"
+  | "ai_extraction"
+  | "verification"
+  | "complete"
+  | "error";
+
+const stageLabels: Record<ProcessingStage, { en: string; ur: string }> = {
+  idle: { en: "", ur: "" },
+  uploading: { en: "Uploading document…", ur: "دستاویز اپ لوڈ ہو رہی ہے…" },
+  ocr_processing: { en: "OCR Processing…", ur: "او سی آر پروسیسنگ…" },
+  ai_extraction: { en: "AI Extraction…", ur: "اے آئی ایکسٹریکشن…" },
+  verification: { en: "Verifying results…", ur: "نتائج کی تصدیق…" },
+  complete: { en: "Extraction complete!", ur: "ایکسٹریکشن مکمل!" },
+  error: { en: "Extraction failed — using fallback data", ur: "ناکام — فال بیک ڈیٹا استعمال ہو رہا ہے" },
+};
+
 interface FileWithPreview {
   file: File;
   id: string;
@@ -35,12 +55,14 @@ interface FileUploadDropzoneProps {
   onFilesSelected?: (files: File[]) => void;
   onExtract?: (files: File[]) => void;
   isExtracting?: boolean;
+  processingStage?: ProcessingStage;
 }
 
 export default function FileUploadDropzone({
   onFilesSelected,
   onExtract,
   isExtracting = false,
+  processingStage = "idle",
 }: FileUploadDropzoneProps) {
   const [files, setFiles] = useState<FileWithPreview[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -106,6 +128,12 @@ export default function FileUploadDropzone({
     if (files.length) onExtract?.(files.map((f) => f.file));
   };
 
+  const isProcessing =
+    processingStage === "uploading" ||
+    processingStage === "ocr_processing" ||
+    processingStage === "ai_extraction" ||
+    processingStage === "verification";
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -119,6 +147,82 @@ export default function FileUploadDropzone({
       </CardHeader>
 
       <CardContent className="space-y-4">
+        {/* Processing stage indicator */}
+        {processingStage !== "idle" && (
+          <div className="rounded-lg border p-4">
+            <div className="mb-3 flex items-center gap-3">
+              {isProcessing ? (
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              ) : processingStage === "complete" ? (
+                <CheckCircle className="h-5 w-5 text-emerald-500" />
+              ) : (
+                <X className="h-5 w-5 text-destructive" />
+              )}
+              <div>
+                <p className="text-sm font-medium">
+                  {stageLabels[processingStage].en}
+                </p>
+                <p className="text-xs text-muted-foreground" dir="rtl" lang="ur">
+                  {stageLabels[processingStage].ur}
+                </p>
+              </div>
+            </div>
+
+            {/* Progress steps */}
+            <div className="flex items-center gap-1">
+              {(
+                [
+                  "uploading",
+                  "ocr_processing",
+                  "ai_extraction",
+                  "verification",
+                ] as ProcessingStage[]
+              ).map((stage, idx) => {
+                const stageOrder = [
+                  "uploading",
+                  "ocr_processing",
+                  "ai_extraction",
+                  "verification",
+                ];
+                const currentIdx = stageOrder.indexOf(processingStage);
+                const isActive = idx <= currentIdx;
+                const isCurrent = stage === processingStage;
+
+                return (
+                  <div key={stage} className="flex flex-1 flex-col items-center gap-1">
+                    <div
+                      className={cn(
+                        "h-1.5 w-full rounded-full transition-colors",
+                        isActive
+                          ? isCurrent
+                            ? "bg-primary animate-pulse"
+                            : "bg-primary/60"
+                          : "bg-muted"
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "text-[9px] font-medium",
+                        isActive
+                          ? "text-primary"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      {stage === "uploading"
+                        ? "Upload"
+                        : stage === "ocr_processing"
+                        ? "OCR"
+                        : stage === "ai_extraction"
+                        ? "Extract"
+                        : "Verify"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Dropzone */}
         <div
           role="button"
@@ -204,6 +308,7 @@ export default function FileUploadDropzone({
                   size="icon"
                   className="h-8 w-8 shrink-0"
                   onClick={() => removeFile(id)}
+                  disabled={isProcessing}
                 >
                   <X className="h-4 w-4" />
                 </Button>
@@ -216,10 +321,15 @@ export default function FileUploadDropzone({
         {files.length > 0 && (
           <Button
             onClick={handleExtract}
-            disabled={isExtracting}
+            disabled={isExtracting || isProcessing}
             className="w-full"
           >
-            {isExtracting ? (
+            {isProcessing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing…
+              </>
+            ) : isExtracting ? (
               <>Extracting…</>
             ) : (
               <>

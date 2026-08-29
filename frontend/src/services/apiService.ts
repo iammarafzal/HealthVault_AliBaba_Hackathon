@@ -52,6 +52,28 @@ export async function uploadDocument(
   );
 }
 
+/** Fetch all medical records for a user. */
+export async function getRecords(
+  userId: string
+): Promise<ExtractionResponse[]> {
+  return withMockFallback([mockExtractionResponse], () =>
+    apiClient.get("/vault/records", {
+      params: { user_id: userId },
+    }) as unknown as Promise<ExtractionResponse[]>
+  );
+}
+
+/** Delete a medical record by ID. */
+export async function deleteRecord(
+  recordId: string
+): Promise<{ success: boolean }> {
+  return withMockFallback({ success: true }, () =>
+    apiClient.delete(`/vault/records/${recordId}`) as unknown as Promise<{
+      success: boolean;
+    }>
+  );
+}
+
 /** Fetch AI-generated clinical summary for a user. */
 export async function getDoctorSummary(
   userId: string
