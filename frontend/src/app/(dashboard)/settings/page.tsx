@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import {
   AlertTriangle,
+  Bell,
   CheckCircle2,
   Eye,
   EyeOff,
@@ -32,8 +33,9 @@ import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import NotificationSettingsCard from "@/components/settings/NotificationSettingsCard";
 
-type SettingsTab = "profile" | "credentials" | "danger";
+type SettingsTab = "profile" | "credentials" | "notifications" | "danger";
 
 const BLOOD_GROUPS = [
   "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-",
@@ -79,6 +81,7 @@ export default function SettingsPage() {
     () => [
       { key: "profile" as const, label: t("settings.tabVitals", "Personal & Medical Vitals"), icon: UserCheck },
       { key: "credentials" as const, label: t("settings.tabCredentials", "Account Credentials"), icon: Lock },
+      { key: "notifications" as const, label: t("settings.tabNotifications", "Dose Reminders & Alerts"), icon: Bell },
       { key: "danger" as const, label: t("settings.tabDanger", "Danger Zone"), icon: ShieldAlert },
     ],
     [t]
@@ -573,7 +576,31 @@ export default function SettingsPage() {
           )}
 
           {/* ═══════════════════════════════════════════════════
-              CARD 3: Danger Zone — Delete Account
+              CARD 3: Notifications & Dose Reminders
+              ═══════════════════════════════════════════════════ */}
+          {activeTab === "notifications" && (
+            <div className="space-y-6">
+              <Card className="border border-[#DCE8E5] bg-white shadow-xs dark:border-border dark:bg-card">
+                <CardHeader className="border-b border-[#DCE8E5] bg-[#F5F8F7] pb-4 dark:border-border dark:bg-card">
+                  <CardTitle className="flex items-center gap-2 text-sm font-bold text-[#1A2826] dark:text-foreground">
+                    <Bell className="h-4 w-4 text-[#0D5C4A] dark:text-teal-400 shrink-0" />
+                    {isUrdu ? "ادویات کے خودکار نوٹیفکیشن" : "Daily Medicine Reminders"}
+                  </CardTitle>
+                  <CardDescription className="text-xs text-[#3D5450] dark:text-muted-foreground">
+                    {isUrdu
+                      ? "اپنے براؤزر میں مقررہ وقت پر ادویات کی یاد دہانی وصول کریں۔"
+                      : "Configure instant browser push notifications for scheduled medicine doses on this device."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5 pt-5">
+                  <NotificationSettingsCard />
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════
+              CARD 4: Danger Zone — Delete Account
               ═══════════════════════════════════════════════════ */}
           {activeTab === "danger" && (
             <Card className="border-2 border-red-200 bg-[#FDF2F2]/40 shadow-xs dark:border-red-900/40 dark:bg-red-950/10">
