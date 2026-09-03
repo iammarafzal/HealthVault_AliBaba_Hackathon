@@ -11,10 +11,10 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import PrivacySettings as PrivacySettingsORM
+from app.models.privacy import PrivacySettings as PrivacySettingsORM
 from app.models.user import User
 from app.schemas.emergency import EmergencyProfileResponse
-from app.schemas.user import EmergencyContact, PrivacySettings, PrivacySettingsUpdate
+from app.schemas.user import EmergencyContactResponse, PrivacySettings, PrivacySettingsUpdate
 
 logger = logging.getLogger("healthvault")
 
@@ -47,7 +47,8 @@ class PrivacyFilterService:
             raw_user_health_id: Patient health identifier.
             raw_user_full_name: Patient full name (always visible).
             raw_user_blood_group: Patient blood group or None.
-            raw_user_emergency_contacts: Raw JSONB list of contact dicts.
+            raw_user_emergency_contacts: List of contact dicts
+                ``[{"name": ..., "relation": ..., "phone": ...}, ...]``.
             privacy_settings: Validated PrivacySettings Pydantic model.
             active_meds: Pre-formatted medication strings ["Name dosage", ...].
             allergies: Pre-formatted allergy strings ["Allergen (severity)", ...].
@@ -82,17 +83,37 @@ class PrivacyFilterService:
             chronic_conditions if privacy_settings.show_chronic_conditions else []
         )
 
-        emergency_contacts: List[EmergencyContact] = []
+        emergency_contacts: List[EmergencyContactResponse] = []
         if privacy_settings.show_emergency_contacts:
             for contact_data in raw_user_emergency_contacts or []:
                 if isinstance(contact_data, dict):
+                    c_id = contact_data.get("id")
+                    if isinstance(c_id, str):
+                        try:
+                            import uuid
+                            c_id = uuid.UUID(c_id)
+                        except ValueError:
+                            c_id = None
                     emergency_contacts.append(
-                        EmergencyContact(
+                        EmergencyContactResponse(
+                            id=c_id,
                             name=contact_data.get("name", ""),
                             relation=contact_data.get("relation", ""),
                             phone=contact_data.get("phone", ""),
+                            is_primary=bool(contact_data.get("is_primary", False)),
+                            priority_order=contact_data.get("priority_order", 1),
                         )
                     )
+
+        emergency_notes: str | None = (
+            privacy_settings.emergency_notes.strip()
+            if (
+                privacy_settings.show_emergency_notes
+                and privacy_settings.emergency_notes
+                and privacy_settings.emergency_notes.strip()
+            )
+            else None
+        )
 
         return EmergencyProfileResponse(
             health_id=raw_user_health_id,
@@ -102,6 +123,7 @@ class PrivacyFilterService:
             active_medications=active_medications,
             chronic_conditions=conditions,
             emergency_contacts=emergency_contacts,
+            emergency_notes=emergency_notes,
             is_revoked=False,
         )
 
@@ -131,10 +153,14 @@ class PrivacyFilterService:
                 show_active_meds=True,
                 show_chronic_conditions=True,
                 show_emergency_contacts=True,
+                show_emergency_notes=True,
+                emergency_notes=None,
+                enable_scan_alerts=True,
                 qr_revoked=False,
             )
             db.add(privacy)
             await db.flush()
+            await db.refresh(privacy)
             logger.info("Created default PrivacySettings for user %s", user_id)
 
         return privacy
@@ -169,6 +195,7 @@ class PrivacyFilterService:
             setattr(privacy, field, value)
 
         await db.flush()
+        await db.refresh(privacy)
         logger.info("Updated PrivacySettings for user %s: %s", user_id, update_dict)
 
         return privacy
@@ -208,6 +235,7 @@ class PrivacyFilterService:
         privacy.qr_revoked = False
 
         await db.flush()
+        await db.refresh(user)
         logger.info(
             "Regenerated health_id for user %s: %s → %s",
             user_id,
