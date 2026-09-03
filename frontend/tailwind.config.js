@@ -49,11 +49,48 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        /* Stitch Custom Design Palette */
+        vault: {
+          teal: "#0D5C4A",
+          active: "#0A8C6A",
+          dark: "#004335",
+          light: "#E8F7F4",
+          border: "#DCE8E5",
+          surface: "#F5F8F7",
+          slate: "#1A2826",
+          red: "#C0392B",
+          warning: "#C47C1A",
+          warningBg: "#FEF5E4",
+          mist: "#B2DFD4",
+          amber: "#C47C1A",
+          amberLight: "#F4A52A",
+          amberTint: "#FEF5E4",
+          mutedTeal: "#3D5450",
+          stoneWhite: "#F5F8F7",
+          tealBorder: "#DCE8E5",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      fontFamily: {
+        jakarta: ["var(--font-jakarta)", "Plus Jakarta Sans", "system-ui", "sans-serif"],
+        inter: ["var(--font-inter)", "Inter", "system-ui", "sans-serif"],
+        urdu: ["var(--font-urdu)", "Noto Nastaliq Urdu", "Urdu Typesetting", "Jameel Noori Nastaleeq", "serif"],
+        arabic: ["var(--font-arabic)", "Noto Sans Arabic", "Segoe UI", "Tahoma", "sans-serif"],
+        mono: ["JetBrains Mono", "monospace"],
+      },
+      fontSize: {
+        "hero-heading": ["clamp(2.5rem, 5vw, 4rem)", { lineHeight: "1.1", letterSpacing: "-0.02em", fontWeight: "600" }],
+        "section-h2": ["clamp(1.75rem, 3vw, 2.5rem)", { lineHeight: "1.2", fontWeight: "600" }],
+        "body-lg": ["1.125rem", { lineHeight: "1.7" }],
+        "body-sm": ["0.875rem", { lineHeight: "1.5" }],
+        "label": ["0.75rem", { fontWeight: "500", letterSpacing: "0.04em" }],
+      },
+      maxWidth: {
+        "landing": "1200px",
       },
       keyframes: {
         "accordion-down": {
@@ -92,6 +129,10 @@ const config = {
           from: { transform: "translateX(var(--radix-toast-swipe-end-x))" },
           to: { transform: "translateX(calc(100% + 1rem))" },
         },
+        marquee: {
+          "0%": { transform: "translateX(0%)" },
+          "100%": { transform: "translateX(-50%)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -103,6 +144,7 @@ const config = {
         "toast-slide-in": "toast-slide-in 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
         "toast-slide-out": "toast-slide-out 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
         "toast-swipe-out": "toast-swipe-out 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+        marquee: "marquee 40s linear infinite",
       },
     },
   },
