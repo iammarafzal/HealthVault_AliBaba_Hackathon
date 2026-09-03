@@ -44,6 +44,29 @@ class EntityPersistenceService:
             # 1) Update medical_records with extracted_data and metadata
             await self._update_medical_record(db, record_id, extracted_data)
 
+            # 1.5) Prescription versioning: invalidate older medications
+            #      when a newer prescription is confirmed.
+            if document_type in ("prescription", "discharge_summary"):
+                from app.services.medication_service import medication_service
+
+                consultation_val = extracted_data.get("consultation_date")
+                prescription_date = None
+                if isinstance(consultation_val, str) and consultation_val:
+                    try:
+                        from datetime import date as _date
+                        prescription_date = _date.fromisoformat(consultation_val)
+                    except ValueError:
+                        pass
+                elif isinstance(consultation_val, date):
+                    prescription_date = consultation_val
+
+                await medication_service.invalidate_older_prescriptions(
+                    db=db,
+                    user_id=user_id,
+                    new_record_id=record_id,
+                    new_prescription_date=prescription_date,
+                )
+
             # 2) Bulk insert medications
             medications_saved = await self._insert_medications(
                 db, user_id, record_id, extracted_data.get("medications", [])
@@ -104,8 +127,9 @@ class EntityPersistenceService:
         # Update metadata fields if present
         if extracted_data.get("doctor_name"):
             record.doctor_name = str(extracted_data["doctor_name"])
-        if extracted_data.get("hospital_name"):
-            record.hospital_name = str(extracted_data["hospital_name"])
+        hospital_name = extracted_data.get("hospital_name") or extracted_data.get("clinic_hospital_name")
+        if hospital_name:
+            record.hospital_name = str(hospital_name)
 
         consultation_date_val = extracted_data.get("consultation_date")
         if isinstance(consultation_date_val, str) and consultation_date_val:
@@ -130,26 +154,71 @@ class EntityPersistenceService:
         if not medications:
             return 0
 
+        # Import locally to avoid circular dependencies if any
+        from app.services.medicine_planner import medicine_planner_service
+        from app.schemas.vault_extraction import DosageTimingSchedule
+
         count = 0
         for med_data in medications:
             if not med_data.get("name"):
                 continue
+                
+            schedule_data = med_data.get("schedule")
+            dosage_schedule = None
+            timing_str = med_data.get("timing")
+
+            if schedule_data:
+                if isinstance(schedule_data, dict):
+                    dosage_schedule = schedule_data
+                elif hasattr(schedule_data, "model_dump"):
+                    dosage_schedule = schedule_data.model_dump(mode="json")
+
+                if dosage_schedule:
+                    parts = []
+                    if dosage_schedule.get("morning"): parts.append("Morning")
+                    if dosage_schedule.get("afternoon"): parts.append("Afternoon")
+                    if dosage_schedule.get("evening"): parts.append("Evening")
+                    meal = dosage_schedule.get("meal_relation", "unspecified")
+                    meal_str = ""
+                    if meal == "before_meals": meal_str = " (Before Meals)"
+                    elif meal == "after_meals": meal_str = " (After Meals)"
+                    elif meal == "with_meals": meal_str = " (With Meals)"
+                    elif meal == "as_needed": meal_str = " (As Needed)"
+                    
+                    if parts:
+                        timing_str = ", ".join(parts) + meal_str
+                    elif dosage_schedule.get("custom_time_instruction"):
+                        timing_str = str(dosage_schedule["custom_time_instruction"])
+
+            # Support for exact dosage parsing from new schema
+            dosage_quantity = str(med_data.get("dose_quantity", med_data.get("dosage", "")))
 
             medication = Medication(
                 user_id=user_id,
                 record_id=record_id,
                 name=str(med_data.get("name", "")),
-                dosage=str(med_data.get("dosage", "")),
-                frequency=str(med_data.get("frequency", "")),
-                timing=med_data.get("timing"),
-                instructions_en=med_data.get("instructions_en"),
-                instructions_ur=med_data.get("instructions_ur"),
+                dosage=dosage_quantity,
+                frequency=str(med_data.get("frequency", f"{dosage_schedule.get('frequency_per_day')} times/day" if dosage_schedule else "")),
+                timing=timing_str,
+                dosage_schedule=dosage_schedule,
+                instructions_en=med_data.get("instructions_en", med_data.get("clinical_purpose")),
+                instructions_ur=med_data.get("instructions_ur", med_data.get("urdu_instruction")),
                 is_active=med_data.get("is_active", True),
             )
             db.add(medication)
+            await db.flush() # flush to get medication.id
+            
+            if dosage_schedule:
+                try:
+                    schedule_obj = DosageTimingSchedule(**dosage_schedule)
+                    await medicine_planner_service.seed_medication_schedule(
+                        db, user_id, medication.id, schedule_obj
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to seed medication schedule: {e}")
+                    
             count += 1
 
-        await db.flush()
         return count
 
     async def _upsert_allergies(
@@ -169,22 +238,29 @@ class EntityPersistenceService:
 
         saved_count = 0
         for allergy_data in allergies:
-            allergen = str(allergy_data.get("allergen", "")).strip()
+            if isinstance(allergy_data, str):
+                allergen = allergy_data.strip()
+                severity = "moderate"
+                reaction_details = None
+            else:
+                allergen = str(allergy_data.get("allergen", "")).strip()
+                severity = str(allergy_data.get("severity", "moderate"))
+                reaction_details = allergy_data.get("reaction_details")
             if not allergen:
                 continue
 
             allergen_lower = allergen.lower()
             if allergen_lower in existing_allergies:
                 existing = existing_allergies[allergen_lower]
-                existing.severity = str(allergy_data.get("severity", "moderate"))
-                existing.reaction_details = allergy_data.get("reaction_details")
+                existing.severity = severity
+                existing.reaction_details = reaction_details
                 db.add(existing)
             else:
                 new_allergy = Allergy(
                     user_id=user_id,
                     allergen=allergen,
-                    severity=str(allergy_data.get("severity", "moderate")),
-                    reaction_details=allergy_data.get("reaction_details"),
+                    severity=severity,
+                    reaction_details=reaction_details,
                 )
                 db.add(new_allergy)
                 existing_allergies[allergen_lower] = new_allergy
@@ -207,7 +283,7 @@ class EntityPersistenceService:
 
         count = 0
         for bio_data in biomarkers:
-            name = bio_data.get("biomarker_name")
+            name = bio_data.get("biomarker_name") or bio_data.get("analyte_name")
             if not name:
                 continue
 
@@ -227,8 +303,8 @@ class EntityPersistenceService:
             except (ValueError, TypeError):
                 numeric_val = 0.0
 
-            ref_min = bio_data.get("reference_min")
-            ref_max = bio_data.get("reference_max")
+            ref_min = bio_data.get("reference_min", bio_data.get("ref_min"))
+            ref_max = bio_data.get("reference_max", bio_data.get("ref_max"))
 
             biomarker = Biomarker(
                 user_id=user_id,

@@ -254,6 +254,10 @@ class MockLLMProvider(BaseLLMProvider):
         if "lab_report" in prompt_lower or "lab" in prompt_lower:
             return MOCK_LAB_EXTRACTION.model_dump(mode="json")
 
+        # --- RAG Chatbot queries ---
+        if any(kw in prompt_lower for kw in ("question", "chat", "rag", "patient history", "patient question", "when should i take")):
+            return {}
+
         # --- Prescription / default extraction ---
         return MOCK_PRESCRIPTION_EXTRACTION.model_dump(mode="json")
 

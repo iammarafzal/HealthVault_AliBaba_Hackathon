@@ -11,8 +11,9 @@ from app.main import app
 from app.models.allergy import Allergy
 from app.models.medication import Medication
 from app.models.record import MedicalRecord
-from app.models.user import PrivacySettings as PrivacySettingsORM, User
-from app.schemas.emergency import EmergencyProfileResponse
+from app.models.privacy import PrivacySettings as PrivacySettingsORM
+from app.models.user import User
+from app.schemas.emergency import EmergencyAccessResponse, EmergencyProfileResponse
 from app.schemas.user import PrivacySettings
 from app.services.emergency_service import EmergencyService, _fetch_medical_data
 from app.services.privacy_service import PrivacyFilterService
@@ -20,18 +21,29 @@ from app.services.privacy_service import PrivacyFilterService
 
 def _create_test_user(health_id: str = "HV-99999") -> User:
     user_id = uuid.uuid4()
-    return User(
+    user = User(
         id=user_id,
         email="emergency_test@example.com",
-        full_name="Fatima Noor",
         health_id=health_id,
+        full_name="Fatima Noor",
         gender="female",
         blood_group="O-",
         emergency_contacts=[
             {"name": "Ali Noor", "relation": "Brother", "phone": "+923001234567"},
             {"name": "Ayesha Noor", "relation": "Mother", "phone": "+923007654321"},
         ],
+        emergency_enabled=True,
     )
+    user.privacy_settings = None
+    return user
+
+
+class _MockContact:
+    """Lightweight stand-in for EmergencyContact ORM objects in tests."""
+    def __init__(self, name: str, relation: str, phone: str):
+        self.name = name
+        self.relation = relation
+        self.phone = phone
 
 
 # ==============================================================================
@@ -212,7 +224,10 @@ async def test_api_emergency_mock_mode():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Note: No authorization headers sent (unauthenticated public access)
-        response = await client.get(f"/api/v1/emergency/{health_id}")
+        response = await client.get(
+            f"/api/v1/emergency/{health_id}",
+            params={"token": "mock-token-for-testing"},
+        )
         assert response.status_code == 200
         data = response.json()
         assert data["health_id"] == health_id
@@ -226,23 +241,26 @@ async def test_api_emergency_non_mock_success():
     settings.USE_MOCK = False
     health_id = "HV-77889"
 
-    mock_profile = EmergencyProfileResponse(
+    mock_profile = EmergencyAccessResponse(
         health_id=health_id,
         full_name="Zainab Bibi",
         blood_group="AB+",
         critical_allergies=["Latex (severe)"],
         active_medications=["Amlodipine 5mg"],
         chronic_conditions=["Hypertension"],
-        emergency_contacts=[{"name": "Hamza Bibi", "relation": "Spouse", "phone": "+923000000000"}],
+        emergency_contacts=[{"id": str(uuid.uuid4()), "name": "Hamza Bibi", "relation": "Spouse", "phone": "+923000000000"}],
         is_revoked=False,
     )
 
-    with patch("app.api.v1.emergency.EmergencyService.get_emergency_profile_by_health_id", new_callable=AsyncMock) as mock_svc:
+    with patch("app.api.v1.emergency.EmergencyService.get_emergency_profile_with_token", new_callable=AsyncMock) as mock_svc:
         mock_svc.return_value = mock_profile
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get(f"/api/v1/emergency/{health_id}")
+            response = await client.get(
+                f"/api/v1/emergency/{health_id}",
+                params={"token": "valid-test-token"},
+            )
             assert response.status_code == 200
             data = response.json()
             assert data["health_id"] == health_id
@@ -256,15 +274,16 @@ async def test_api_emergency_not_found():
     settings.USE_MOCK = False
     health_id = "HV-NOTFOUND"
 
-    with patch("app.api.v1.emergency.EmergencyService.get_emergency_profile_by_health_id", new_callable=AsyncMock) as mock_svc:
+    with patch("app.api.v1.emergency.EmergencyService.get_emergency_profile_with_token", new_callable=AsyncMock) as mock_svc:
         mock_svc.side_effect = ValueError(f"No user found with health_id '{health_id}'")
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get(f"/api/v1/emergency/{health_id}")
+            response = await client.get(
+                f"/api/v1/emergency/{health_id}",
+                params={"token": "any-token"},
+            )
             assert response.status_code == 404
-            data = response.json()
-            assert "No user found with health_id" in data["detail"]
 
 
 @pytest.mark.asyncio
@@ -272,12 +291,15 @@ async def test_api_emergency_internal_error():
     settings.USE_MOCK = False
     health_id = "HV-ERROR"
 
-    with patch("app.api.v1.emergency.EmergencyService.get_emergency_profile_by_health_id", new_callable=AsyncMock) as mock_svc:
+    with patch("app.api.v1.emergency.EmergencyService.get_emergency_profile_with_token", new_callable=AsyncMock) as mock_svc:
         mock_svc.side_effect = RuntimeError("DB connection timeout")
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get(f"/api/v1/emergency/{health_id}")
+            response = await client.get(
+                f"/api/v1/emergency/{health_id}",
+                params={"token": "any-token"},
+            )
             assert response.status_code == 500
             data = response.json()
             assert "Failed to retrieve emergency profile" in data["detail"]

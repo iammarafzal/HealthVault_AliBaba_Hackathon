@@ -8,7 +8,7 @@ from typing import List
 from app.schemas.emergency import EmergencyProfileResponse
 from app.schemas.interactions import DrugInteractionAlert, InteractionCheckResponse
 from app.schemas.summary import DoctorSummaryResponse
-from app.schemas.user import EmergencyContact
+from app.schemas.user import EmergencyContactResponse
 from app.schemas.vault import (
     ExtractedAllergy,
     ExtractedMedication,
@@ -20,50 +20,166 @@ SAMPLE_USER_ID = uuid.UUID("3fa85f64-5717-4562-b3fc-2c963f66afa6")
 SAMPLE_RECORD_ID_1 = uuid.UUID("a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d")
 SAMPLE_RECORD_ID_2 = uuid.UUID("b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e")
 
-# 1. Mock Prescription Extraction Payload
+# 1. Mock Prescription Extraction Payload (Audited Pakistani Handwritten Clinical Prescription)
 MOCK_PRESCRIPTION_EXTRACTION = ExtractionResponse(
     record_id=SAMPLE_RECORD_ID_1,
     document_type="prescription",
-    doctor_name="Dr. Tariq Mahmood",
-    hospital_name="Shifa International Hospital, Islamabad",
-    consultation_date=date(2025, 2, 15),
-    diagnoses=["Type 2 Diabetes Mellitus", "Essential Hypertension"],
+    doctor_name="Dr. Medical Specialist",
+    hospital_name="Khursheed Clinic (DHQ Hospital Bhakkar)",
+    consultation_date=date(2024, 8, 24),
+    diagnoses=[
+        "Afebrile UTI (پیشاب کی نالی کا انفیکشن)",
+        "Fibroid Uterus (رحم کی رسولی)",
+        "Dysmenorrhea (+) (شدید دردِ ماہواری)",
+        "Vitals: BP 110/80 mmHg",
+    ],
     medications=[
         ExtractedMedication(
-            name="Metformin",
-            dosage="500mg",
-            frequency="BD (Twice Daily)",
-            timing="After Meals (Morning / Night)",
-            instructions_en="Take 1 tablet twice daily after meals with water.",
-            instructions_ur="کھانے کے بعد دن میں دو بار ایک گولی پانی کے ساتھ لیں۔",
+            name="Tab Solif 5mg (Solifenacin)",
+            dosage="0.5 Tablet",
+            dosage_quantity="0.5 Tablet",
+            strength="5mg",
+            frequency="OD (Once Daily - Evening)",
+            timing="Evening (شام کو)",
+            fraction="half",
+            fraction_label_en="0.5 Tablet",
+            fraction_label_ur="0.5 گولی",
+            meal_context="after_meal",
+            meal_context_en="After meals",
+            meal_context_ur="کھانے کے بعد",
+            purpose_en="Urinary bladder spasm & UTI symptom relief",
+            purpose_ur="پیشاب کے کنٹرول اور مثانے کے سکون کے لیے",
+            duration="5 days",
+            duration_ur="۵ دن",
+            timing_breakdown={"morning": True, "afternoon": False, "night": True},
+            instructions_en="Take 0.5 tablet once daily in the evening with water for 5 days.",
+            instructions_ur="روزانہ شام کو آدھی گولی پانی کے ساتھ لیں۔ یہ دوا ۵ دن تک جاری رکھیں۔",
             is_active=True,
         ),
         ExtractedMedication(
-            name="Amlodipine",
-            dosage="5mg",
-            frequency="OD (Once Daily)",
-            timing="Morning",
-            instructions_en="Take 1 tablet once daily in the morning.",
-            instructions_ur="صبح کے وقت روزانہ ایک گولی لیں۔",
+            name="Tab Femax 500mg",
+            dosage="1 Tablet",
+            dosage_quantity="1 Tablet",
+            strength="500mg",
+            frequency="OD (Once Daily - Evening)",
+            timing="Evening (شام کو)",
+            fraction="full",
+            fraction_label_en="1 Tablet",
+            fraction_label_ur="1 گولی",
+            meal_context="after_meal",
+            meal_context_en="After meals",
+            meal_context_ur="کھانے کے بعد",
+            purpose_en="Nutritional supplement for anemia",
+            purpose_ur="خون کی کمی اور عمومی کمزوری دور کرنے کے لیے",
+            duration="Daily",
+            duration_ur="روزانہ",
+            timing_breakdown={"morning": False, "afternoon": False, "night": True},
+            instructions_en="Take 1 tablet once daily in the evening after meals with water.",
+            instructions_ur="روزانہ شام کو کھانے کے بعد ایک گولی پانی کے ساتھ لیں۔",
+            is_active=True,
+        ),
+        ExtractedMedication(
+            name="Tab Neoprox 250mg",
+            dosage="1 Tablet",
+            dosage_quantity="1 Tablet",
+            strength="250mg",
+            frequency="1 + 1 (BD - Twice Daily)",
+            timing="Morning & Night (صبح و شام)",
+            fraction="full",
+            fraction_label_en="1 Tablet",
+            fraction_label_ur="1 گولی",
+            meal_context="after_meal",
+            meal_context_en="After meals",
+            meal_context_ur="کھانے کے بعد",
+            purpose_en="For pain relief & cramps",
+            purpose_ur="درد اور سوزش میں آرام کے لیے",
+            duration="3 days",
+            duration_ur="۳ دن",
+            timing_breakdown={"morning": True, "afternoon": False, "night": True},
+            instructions_en="Take 1 tablet twice daily after meals for 3 days for pain relief.",
+            instructions_ur="صبح اور شام کھانے کے بعد ایک گولی درد کے لیے لیں۔ یہ دوا ۳ دن کے لیے ہے۔",
+            is_active=True,
+        ),
+        ExtractedMedication(
+            name="Cap Eso 40mg",
+            dosage="1 Capsule",
+            dosage_quantity="1 Capsule",
+            strength="40mg",
+            frequency="1 + 0 + 1 (BD - Morning & Night)",
+            timing="Morning & Night (صبح و رات)",
+            fraction="full",
+            fraction_label_en="1 Capsule",
+            fraction_label_ur="1 کیپسول",
+            meal_context="before_meal",
+            meal_context_en="Before meals",
+            meal_context_ur="کھانے سے پہلے",
+            purpose_en="Stomach protection",
+            purpose_ur="معدے کی حفاظت اور تیزابیت روکنے کے لیے",
+            duration="10 days",
+            duration_ur="۱۰ دن",
+            timing_breakdown={"morning": True, "afternoon": False, "night": True},
+            instructions_en="Take 1 capsule twice daily 30 minutes before meals for 10 days.",
+            instructions_ur="صبح نہار منہ اور رات کھانے سے آدھا گھنٹہ پہلے ایک کیپسول لیں۔ ۱۰ دن تک جاری رکھیں۔",
+            is_active=True,
+        ),
+        ExtractedMedication(
+            name="Tab Anafortan Plus",
+            dosage="1 Tablet",
+            dosage_quantity="1 Tablet",
+            strength=None,
+            frequency="1 + 1 (BD - Twice Daily)",
+            timing="Morning & Night (صبح و شام)",
+            fraction="full",
+            fraction_label_en="1 Tablet",
+            fraction_label_ur="1 گولی",
+            meal_context="after_meal",
+            meal_context_en="After meals",
+            meal_context_ur="کھانے کے بعد",
+            purpose_en="For pain & cramps",
+            purpose_ur="پیٹ کے مروڑ، کھچاؤ اور اینٹھن کے لیے",
+            duration="3 days",
+            duration_ur="۳ دن",
+            timing_breakdown={"morning": True, "afternoon": False, "night": True},
+            instructions_en="Take 1 tablet twice daily after meals for 3 days for pain.",
+            instructions_ur="صبح اور شام کھانے کے بعد ایک گولی پیٹ درد اور مروڑ کے لیے لیں۔ ۳ دن تک استعمال کریں۔",
+            is_active=True,
+        ),
+        ExtractedMedication(
+            name="Syp Ulsanic",
+            dosage="2 Teaspoons",
+            dosage_quantity="2 Teaspoons",
+            strength=None,
+            frequency="2 Teaspoons (BD / TDS)",
+            timing="Before meals",
+            fraction="2_spoons",
+            fraction_label_en="2 Teaspoons",
+            fraction_label_ur="۲ چمچ",
+            meal_context="before_meal",
+            meal_context_en="Before meals",
+            meal_context_ur="کھانے سے پہلے",
+            purpose_en="Stomach protection",
+            purpose_ur="معدے کی حفاظت اور جلن سے بچاؤ کے لیے",
+            duration="As advised",
+            duration_ur="حسبِ ضرورت",
+            timing_breakdown={"morning": True, "afternoon": False, "night": True},
+            instructions_en="Take 2 teaspoons 1 hour before meals for stomach protection.",
+            instructions_ur="کھانے سے ایک گھنٹہ پہلے ۲ چائے کے چمچ شربت پیئیں۔",
             is_active=True,
         ),
     ],
-    allergies=[
-        ExtractedAllergy(
-            allergen="Penicillin",
-            severity="severe",
-            reaction_details="Anaphylaxis and hives upon exposure",
-        )
-    ],
+    allergies=[],
     raw_ocr_text=(
-        "Dr. Tariq Mahmood - Shifa International Hospital\n"
-        "Date: 15/02/2025\n"
-        "Patient: Ahmad Raza (54M)\n"
+        "Khursheed Clinic - DHQ Hospital Bhakkar\n"
+        "Consultant: Dr. Asma Malik\n"
+        "Patient: Abida | Date: 24-08-2024 | Vitals: BP 110/80\n"
+        "Diagnosis: Afebrile UTI / Fibroid uterus, Dysmenorrhea (+)\n"
         "Rx:\n"
-        "1. Tab. Metformin 500mg BD (PC)\n"
-        "2. Tab. Amlodipine 5mg OD\n"
-        "Allergies: Penicillin (Severe)\n"
-        "Adv: Monitor fasting blood glucose weekly."
+        "1. Tab Solif 5mg — آدھی گولی روزانہ شام کو (۵ دن)\n"
+        "2. Tab Femax 500mg — ایک گولی شام کو\n"
+        "3. Tab Neoprox 250mg — 1 + 1 درد کے لیے (۳ دن)\n"
+        "4. Cap Eso 40mg — 1 + 0 + 1 (۱۰ دن) کھانے سے پہلے\n"
+        "5. Tab Anafortan Plus — 1 + 1 درد کے لیے (۳ دن)\n"
+        "6. Syp Ulsanic — ۲ چمچ کھانے سے پہلے"
     ),
 )
 
@@ -152,9 +268,10 @@ MOCK_EMERGENCY_PROFILE = EmergencyProfileResponse(
     active_medications=["Metformin 500mg BD", "Amlodipine 5mg OD"],
     chronic_conditions=["Type 2 Diabetes Mellitus", "Essential Hypertension"],
     emergency_contacts=[
-        EmergencyContact(name="Ali Raza", relation="Son", phone="+92-300-9876543"),
-        EmergencyContact(name="Fatima Bibi", relation="Spouse", phone="+92-321-1234567"),
+        EmergencyContactResponse(id=uuid.uuid4(), name="Ali Raza", relation="Son", phone="+92-300-9876543"),
+        EmergencyContactResponse(id=uuid.uuid4(), name="Fatima Bibi", relation="Spouse", phone="+92-321-1234567"),
     ],
+    emergency_notes="Carries EpiPen in front pocket. Pacemaker fitted in 2024.",
     is_revoked=False,
 )
 

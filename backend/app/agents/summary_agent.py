@@ -27,8 +27,14 @@ logger = logging.getLogger("healthvault")
 # ---------------------------------------------------------------------------
 _SUMMARY_SYSTEM_PROMPT = (
     "Chief Medical Officer generating a 10-second clinical patient summary. "
-    "Synthesize records into JSON. Group active medications; highlight severe "
-    "allergies and abnormal biomarkers. RAW JSON only—no markdown, no explanation."
+    "Synthesize the provided records and patient history strictly into JSON. "
+    "CRITICAL GROUNDING RULES:\n"
+    "- Summarize ONLY active medications, allergies, diagnoses, and biomarkers explicitly provided in the input context.\n"
+    "- If no allergies are recorded in the input, known_allergies MUST be []. Do NOT invent or assume placeholder allergies (e.g., do NOT insert Penicillin).\n"
+    "- If no active medications are recorded, current_medications MUST be [].\n"
+    "- If no diagnoses exist in records, active_diagnoses MUST be [].\n"
+    "- Highlight severe allergies and abnormal biomarkers ONLY if present in the input context.\n"
+    "- RAW JSON only—no markdown, no explanation."
 )
 
 
@@ -87,12 +93,17 @@ class SummaryAgent:
         ).all()
 
         # 3. Aggregate into prompt context -----------------------------------
+        full_name = getattr(user, "full_name", "") or "Unknown"
+        dob = getattr(user, "date_of_birth", None)
+        gender = getattr(user, "gender", None) or "unknown"
+        blood_group = getattr(user, "blood_group", None) or "N/A"
+
         patient_json = json.dumps({
-            "full_name": user.full_name,
+            "full_name": full_name,
             "health_id": user.health_id,
-            "date_of_birth": str(user.date_of_birth) if user.date_of_birth else None,
-            "gender": user.gender or "unknown",
-            "blood_group": user.blood_group or "N/A",
+            "date_of_birth": str(dob) if dob else None,
+            "gender": gender,
+            "blood_group": blood_group,
         }, default=str)
 
         vault_records_json = json.dumps(
@@ -123,14 +134,42 @@ class SummaryAgent:
             default=str,
         )
 
-        # 4. Build user prompt — compact context, no redundant schema re-statement
+        medications_json = json.dumps(
+            [
+                {
+                    "name": m.name,
+                    "dosage": m.dosage,
+                    "frequency": m.frequency,
+                    "instructions_en": m.instructions_en,
+                }
+                for m in active_meds
+            ],
+            default=str,
+        )
+
+        allergies_json = json.dumps(
+            [
+                {
+                    "allergen": a.allergen,
+                    "severity": a.severity,
+                    "reaction_details": a.reaction_details,
+                }
+                for a in allergies
+            ],
+            default=str,
+        )
+
+        # 4. Build user prompt — compact context with database ground truth
         user_prompt = (
             f"Patient: {patient_json}\n"
+            f"Active Medications: {medications_json}\n"
+            f"Known Allergies: {allergies_json}\n"
             f"Records: {vault_records_json}\n"
-            f"Abnormal Biomarkers: {biomarkers_json}\n"
+            f"Abnormal Biomarkers: {biomarkers_json}\n\n"
             "Output JSON with keys: patient_name, health_id, age_gender, blood_group, "
             "active_diagnoses, current_medications, known_allergies, surgical_history, "
-            "recent_abnormal_biomarkers, risk_factors, clinical_notes."
+            "recent_abnormal_biomarkers, risk_factors, clinical_notes. "
+            "Remember: If no allergies are in Known Allergies, return known_allergies: []."
         )
 
         # 5. Invoke LLM provider ---------------------------------------------
@@ -142,7 +181,13 @@ class SummaryAgent:
 
         # 6. Validate / fallback ---------------------------------------------
         if result and "patient_name" in result:
-            return DoctorSummaryResponse(**result)
+            try:
+                return DoctorSummaryResponse(**result)
+            except Exception as validation_exc:
+                logger.warning(
+                    "LLM summary failed Pydantic validation: %s; building fallback",
+                    validation_exc,
+                )
 
         # Fallback: build deterministic summary from raw DB data
         logger.warning(
@@ -181,10 +226,15 @@ class SummaryAgent:
         """Construct a DoctorSummaryResponse directly from DB rows
         when the LLM provider is unavailable or returns invalid data."""
 
+        full_name = getattr(user, "full_name", "") or "Unknown"
+        dob = getattr(user, "date_of_birth", None)
+        gender = getattr(user, "gender", None) or "unknown"
+        blood_group = getattr(user, "blood_group", None) or "N/A"
+
         # Age + gender string
-        age = SummaryAgent._compute_age(user.date_of_birth)
-        gender_char = (user.gender or "unknown").capitalize()[0]
-        age_gender = f"{age}{gender_char}" if age else f"Unknown-{user.gender or 'unknown'}"
+        age = SummaryAgent._compute_age(dob)
+        gender_char = (gender or "unknown").capitalize()[0]
+        age_gender = f"{age}{gender_char}" if age else f"Unknown-{gender}"
 
         # Active diagnoses: de-duplicated from extracted_data across records
         diagnoses: List[str] = []
@@ -231,7 +281,7 @@ class SummaryAgent:
 
         # Clinical notes: 1-paragraph executive summary
         notes_parts = [
-            f"{age_gender} patient, blood group {user.blood_group or 'N/A'}."
+            f"{age_gender} patient, blood group {blood_group}."
         ]
         if diagnoses:
             notes_parts.append(f"Active diagnoses include {', '.join(diagnoses)}.")
@@ -244,10 +294,10 @@ class SummaryAgent:
         clinical_notes = " ".join(notes_parts)
 
         return DoctorSummaryResponse(
-            patient_name=user.full_name,
+            patient_name=full_name,
             health_id=user.health_id,
             age_gender=age_gender,
-            blood_group=user.blood_group or "N/A",
+            blood_group=blood_group,
             active_diagnoses=diagnoses,
             current_medications=current_medications,
             known_allergies=known_allergies,

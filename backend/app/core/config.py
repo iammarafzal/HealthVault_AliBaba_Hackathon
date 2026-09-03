@@ -44,13 +44,23 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "dashscope"
     LLM_MODEL_NAME: Optional[str] = None  # Explicit override if set
 
+    # ----------------------------------------------------------------------
+    # Pluggable Vision LLM Configuration
+    # Options for VISION_PROVIDER: "gemini" | "qwen" | "openai" | "groq" | "mock"
+    # ----------------------------------------------------------------------
+    VISION_PROVIDER: str = "gemini"
+    VISION_MODEL: str = "gemini-3.1-flash-lite"
+
     # Alibaba Cloud — DashScope (Qwen Models: qwen-plus, qwen-max, qwen-turbo)
-    DASHSCOPE_API_KEY: str = ""
+    DASHSCOPE_API_KEY: Optional[str] = None
     DASHSCOPE_MODEL_NAME: str = "qwen-plus"
 
     # Google AI Studio — Gemini Models (gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash)
-    GEMINI_API_KEY: str = ""
-    GEMINI_MODEL_NAME: str = "gemini-1.5-flash"
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL_NAME: str = "gemini-3.1-flash-lite"
+
+    # OpenAI-compatible Vision Models (gpt-4o, gpt-4o-mini)
+    OPENAI_API_KEY: Optional[str] = None
 
     # Alibaba Cloud — Object Storage Service (OSS)
     OSS_ACCESS_KEY_ID: str = ""

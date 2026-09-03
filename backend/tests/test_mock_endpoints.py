@@ -23,12 +23,11 @@ async def test_vault_upload_and_extract_prescription_mock():
         assert response.status_code == 200
         data = response.json()
         assert data["document_type"] == "prescription"
-        assert data["doctor_name"] == "Dr. Tariq Mahmood"
-        assert len(data["medications"]) == 2
-        assert data["medications"][0]["name"] == "Metformin"
+        assert data["doctor_name"] == "Dr. Medical Specialist"
+        assert len(data["medications"]) == 6
+        assert "Solif" in data["medications"][0]["name"]
         assert "instructions_ur" in data["medications"][0]
-        assert len(data["allergies"]) == 1
-        assert data["allergies"][0]["allergen"] == "Penicillin"
+        assert len(data["allergies"]) == 0
 
 
 @pytest.mark.asyncio
@@ -113,7 +112,10 @@ async def test_emergency_profile_endpoint():
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get(f"/api/v1/emergency/{health_id}")
+        response = await client.get(
+            f"/api/v1/emergency/{health_id}",
+            params={"token": "mock-qr-token-for-testing"},
+        )
         assert response.status_code == 200
         data = response.json()
         assert data["health_id"] == health_id

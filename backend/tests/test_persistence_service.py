@@ -40,7 +40,7 @@ async def test_insert_medications():
 
     assert saved_count == 2
     assert mock_db.add.call_count == 2
-    mock_db.flush.assert_awaited_once()
+    assert mock_db.flush.await_count == 2
 
 
 @pytest.mark.asyncio

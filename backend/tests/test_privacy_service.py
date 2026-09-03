@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock, MagicMock
 import uuid
 import pytest
 
-from app.models.user import PrivacySettings as PrivacySettingsORM
+from app.models.privacy import PrivacySettings as PrivacySettingsORM
 from app.schemas.emergency import EmergencyProfileResponse
-from app.schemas.user import EmergencyContact, PrivacySettings, PrivacySettingsUpdate
+from app.schemas.user import PrivacySettings, PrivacySettingsUpdate
 from app.services.privacy_service import PrivacyFilterService
 
 
@@ -259,3 +259,59 @@ async def test_update_user_privacy_settings_not_found():
             user_id=user_id,
             update_data=update_payload,
         )
+
+
+def test_filter_emergency_data_emergency_notes_enabled():
+    privacy = PrivacySettings(
+        show_emergency_notes=True,
+        emergency_notes="Carries EpiPen in backpack.\nPacemaker fitted 2024.",
+    )
+    res = PrivacyFilterService.filter_emergency_data(
+        raw_user_health_id="HV-1001",
+        raw_user_full_name="Ahmad Raza",
+        raw_user_blood_group="B+",
+        raw_user_emergency_contacts=[],
+        privacy_settings=privacy,
+        active_meds=[],
+        allergies=[],
+        chronic_conditions=[],
+    )
+    assert res.emergency_notes == "Carries EpiPen in backpack. Pacemaker fitted 2024."
+
+
+def test_filter_emergency_data_emergency_notes_disabled():
+    privacy = PrivacySettings(
+        show_emergency_notes=False,
+        emergency_notes="Carries EpiPen in backpack.",
+    )
+    res = PrivacyFilterService.filter_emergency_data(
+        raw_user_health_id="HV-1001",
+        raw_user_full_name="Ahmad Raza",
+        raw_user_blood_group="B+",
+        raw_user_emergency_contacts=[],
+        privacy_settings=privacy,
+        active_meds=[],
+        allergies=[],
+        chronic_conditions=[],
+    )
+    assert res.emergency_notes is None
+
+
+def test_privacy_settings_emergency_notes_length_validation():
+    from pydantic import ValidationError
+
+    # > 250 characters should fail validation
+    long_note = "A" * 251
+    with pytest.raises(ValidationError):
+        PrivacySettings(emergency_notes=long_note)
+
+    # Multi-line note sanitization
+    multiline_note = "  Carries EpiPen   in backpack. \n\n Pacemaker \t fitted 2024.  "
+    settings = PrivacySettings(emergency_notes=multiline_note)
+    assert settings.emergency_notes == "Carries EpiPen in backpack. Pacemaker fitted 2024."
+
+    # <= 250 characters should succeed
+    valid_note = "A" * 250
+    settings = PrivacySettings(emergency_notes=valid_note)
+    assert len(settings.emergency_notes) == 250
+

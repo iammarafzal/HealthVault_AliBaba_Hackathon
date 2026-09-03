@@ -1,23 +1,27 @@
 # HealthVault AI — Auth Routes
-# POST /api/v1/auth/register — Create account + issue JWT
+# POST /api/v1/auth/register — Fast 3-field onboarding + issue JWT
 # POST /api/v1/auth/login    — Verify credentials + issue JWT
 # GET  /api/v1/auth/me        — Current user profile (Bearer token)
 
 import logging
 import random
 import string
-from typing import Optional
-from uuid import UUID
+import uuid
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.security import create_access_token, hash_password, verify_password
+from app.api.deps import get_current_user
 from app.models.user import User
-from app.schemas.user import UserCreate, UserResponse
+from app.models.privacy import PrivacySettings
+from app.schemas.auth import UserRegisterRequest, UserLogin, TokenResponse
+from app.schemas.user import UserResponse
+from app.services.security_service import generate_emergency_token
 
 logger = logging.getLogger("healthvault")
 
@@ -25,68 +29,27 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 # ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
-class LoginRequest(BaseModel):
-    email: str = Field(..., examples=["patient@example.com"])
-    password: str = Field(..., examples=["Str0ngP@ss"])
-
-
-class TokenOut(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: UserResponse
-
-
-# ---------------------------------------------------------------------------
-# Dependencies
-# ---------------------------------------------------------------------------
-async def _resolve_user_id(
-    authorization: Optional[str] = Header(None),
-) -> UUID:
-    """Parse the Bearer token from the Authorization header and return the user id."""
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization header missing.",
-        )
-    parts = authorization.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Authorization header. Expected 'Bearer <token>'.",
-        )
-    from app.core.security import verify_access_token
-
-    subject = verify_access_token(parts[1])
-    if not subject:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token.",
-        )
-    try:
-        return UUID(subject)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token subject.",
-        )
-
-
-# ---------------------------------------------------------------------------
 # POST /api/v1/auth/register
 # ---------------------------------------------------------------------------
 @router.post(
     "/register",
-    response_model=TokenOut,
+    response_model=TokenResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Register a new patient account and return an access token",
+    summary="Register with Full Name, Email & Password — instant JWT issued",
 )
 async def register(
-    body: UserCreate,
+    body: UserRegisterRequest,
     db: AsyncSession = Depends(get_db),
-) -> TokenOut:
-    """Create a new user, generate a unique health_id, and return a JWT."""
+) -> TokenResponse:
+    """Fast 3-field onboarding.
+
+    Within a single DB transaction this endpoint:
+    1. Checks for duplicate email.
+    2. Creates the ``users`` row (auth + identifiers).
+    3. Creates the ``privacy_settings`` row with defaults.
+    4. Provisions ``health_id`` and ``emergency_token``.
+    5. Returns a signed JWT + full user envelope.
+    """
     # Check for duplicate email
     existing = await db.scalar(
         select(User).where(User.email == body.email)
@@ -97,34 +60,47 @@ async def register(
             detail="A user with this email already exists.",
         )
 
-    # Generate a unique HV-PAK-XXXXX health_id
     health_id = await _generate_unique_health_id(db)
 
-    import uuid
-    from datetime import datetime, timezone
-
+    # 1. Create User (core identity + auth)
     user = User(
         id=uuid.uuid4(),
-        full_name=body.full_name,
         email=body.email,
-        phone=body.phone,
+        full_name=body.full_name,
         hashed_password=hash_password(body.password),
-        blood_group=body.blood_group,
-        date_of_birth=body.date_of_birth,
-        gender=body.gender,
         health_id=health_id,
+        emergency_token=generate_emergency_token(),
+        emergency_enabled=True,
         role="patient",
         created_at=datetime.now(timezone.utc),
-        emergency_contacts=[c.model_dump() for c in body.emergency_contacts],
     )
     db.add(user)
     await db.flush()
-    await db.refresh(user)
 
-    token = create_access_token(subject=str(user.id))
+    # 2. Create PrivacySettings (1-to-1, all defaults)
+    privacy = PrivacySettings(user_id=user.id)
+    db.add(privacy)
+    await db.flush()
+
+    # 3. Refresh with eager-loaded relations for response serialization
+    stmt = (
+        select(User)
+        .where(User.id == user.id)
+        .options(
+            selectinload(User.privacy_settings),
+        )
+    )
+    result = await db.execute(stmt)
+    user = result.scalar_one()
+
+    # 4. Issue JWT with standard claims: sub, health_id, email
+    token = create_access_token(
+        subject=str(user.id),
+        extra_claims={"health_id": user.health_id, "email": user.email},
+    )
     logger.info("Registered new user %s (health_id=%s)", user.id, health_id)
 
-    return TokenOut(
+    return TokenResponse(
         access_token=token,
         user=UserResponse.model_validate(user),
     )
@@ -135,18 +111,25 @@ async def register(
 # ---------------------------------------------------------------------------
 @router.post(
     "/login",
-    response_model=TokenOut,
+    response_model=TokenResponse,
     status_code=status.HTTP_200_OK,
     summary="Authenticate with email + password and receive a JWT",
 )
 async def login(
-    body: LoginRequest,
+    body: UserLogin,
     db: AsyncSession = Depends(get_db),
-) -> TokenOut:
+) -> TokenResponse:
     """Verify credentials and return a signed JWT access token."""
-    user = await db.scalar(
-        select(User).where(User.email == body.email)
+    stmt = (
+        select(User)
+        .where(User.email == body.email)
+        .options(
+            selectinload(User.privacy_settings),
+        )
     )
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
     if not user or not user.hashed_password:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -159,10 +142,14 @@ async def login(
             detail="Invalid email or password.",
         )
 
-    token = create_access_token(subject=str(user.id))
+    # Issue JWT with standard claims: sub, health_id, email
+    token = create_access_token(
+        subject=str(user.id),
+        extra_claims={"health_id": user.health_id, "email": user.email},
+    )
     logger.info("User %s logged in successfully", user.id)
 
-    return TokenOut(
+    return TokenResponse(
         access_token=token,
         user=UserResponse.model_validate(user),
     )
@@ -178,17 +165,10 @@ async def login(
     summary="Get the authenticated user's profile",
 )
 async def get_me_profile(
-    user_id: UUID = Depends(_resolve_user_id),
-    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> UserResponse:
     """Return the profile of the currently authenticated user."""
-    user = await db.scalar(select(User).where(User.id == user_id))
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found.",
-        )
-    return UserResponse.model_validate(user)
+    return UserResponse.model_validate(current_user)
 
 
 # ---------------------------------------------------------------------------

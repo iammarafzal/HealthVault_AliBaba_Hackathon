@@ -21,6 +21,7 @@ interface SingleChartProps {
   refMin?: number;
   refMax?: number;
   refLines?: { value: number; label: string; color: string }[];
+  locale?: string;
 }
 
 /** Custom tooltip for single-metric charts. */
@@ -28,35 +29,51 @@ function SingleTooltip({
   active,
   payload,
   label,
+  locale = "en",
 }: {
   active?: boolean;
   payload?: Array<{ value: number; payload: BiomarkerDataPoint }>;
   label?: string;
+  locale?: string;
 }) {
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
+  const isUrdu = locale === "ur";
+  const statusLabel =
+    point.status === "normal"
+      ? (isUrdu ? "محفوظ / نارمل" : "Safe / Normal")
+      : point.status === "high"
+      ? (isUrdu ? "نارمل سے زیادہ" : "Higher Than Normal")
+      : (isUrdu ? "نارمل سے کم" : "Lower Than Normal");
+
+  const formattedDate = (() => {
+    const raw = label ?? point.test_date;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? raw : d.toLocaleDateString(isUrdu ? "ur-PK" : "en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  })();
+
   return (
-    <div className="rounded-lg border bg-background px-3 py-2 shadow-md">
-      <p className="text-xs font-medium text-muted-foreground">
-        {new Date(label ?? point.test_date).toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        })}
+    <div className="rounded-lg border border-vault-border bg-card px-3 py-2 shadow-lg dark:border-border">
+      <p className="text-[10px] font-bold uppercase text-muted-foreground">
+        {formattedDate}
       </p>
-      <p className="text-sm font-bold">
+      <p className="text-sm font-bold text-vault-teal dark:text-teal-300">
         {point.value} {point.unit}
       </p>
       <p
-        className={`text-xs font-semibold ${
+        className={`text-xs font-bold ${
           point.status === "normal"
-            ? "text-emerald-500"
+            ? "text-emerald-600 dark:text-emerald-400"
             : point.status === "high"
-              ? "text-red-500"
-              : "text-blue-500"
+            ? "text-vault-red"
+            : "text-blue-600 dark:text-blue-400"
         }`}
       >
-        {point.status.toUpperCase()}
+        {isUrdu ? "حالت:" : "Status:"} {statusLabel}
       </p>
     </div>
   );
@@ -69,84 +86,93 @@ export function BiomarkerLineChart({
   refMin,
   refMax,
   refLines,
+  locale = "en",
 }: SingleChartProps) {
+  const isUrdu = locale === "ur";
+
   return (
     <ResponsiveContainer width="100%" height={320}>
       <LineChart
         data={data}
         margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
       >
-        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+        <CartesianGrid strokeDasharray="3 3" className="stroke-muted/60" />
         <XAxis
           dataKey="test_date"
-          tickFormatter={(v: string) =>
-            new Date(v).toLocaleDateString("en-US", {
-              month: "short",
-              year: "2-digit",
-            })
-          }
-          className="text-xs"
-          tick={{ fontSize: 12 }}
+          tickFormatter={(v: string) => {
+            const d = new Date(v);
+            return isNaN(d.getTime())
+              ? v
+              : d.toLocaleDateString(isUrdu ? "ur-PK" : "en-US", {
+                  month: "short",
+                  year: "2-digit",
+                });
+          }}
+          className="text-xs font-semibold"
+          tick={{ fontSize: 11, fill: "currentColor" }}
         />
         <YAxis
           domain={["auto", "auto"]}
-          tick={{ fontSize: 12 }}
+          tick={{ fontSize: 11, fill: "currentColor" }}
           label={{
             value: unit,
             angle: -90,
             position: "insideLeft",
-            style: { fontSize: 11 },
+            style: { fontSize: 11, fontWeight: "bold", fill: "#0D5C4A" },
           }}
         />
-        <Tooltip content={<SingleTooltip />} />
+        <Tooltip content={<SingleTooltip locale={locale} />} />
         <Legend
-          wrapperStyle={{ fontSize: 12 }}
+          wrapperStyle={{ fontSize: 12, fontWeight: "bold" }}
           formatter={() => metricName}
         />
 
-        {/* Reference range shading */}
+        {/* Reference range lines */}
         {refMin != null && (
           <ReferenceLine
             y={refMin}
-            stroke="#22c55e"
-            strokeDasharray="6 4"
-            strokeWidth={1}
+            stroke="#10b981"
+            strokeDasharray="5 3"
+            strokeWidth={1.5}
             label={{
-              value: `Min: ${refMin}`,
+              value: `${isUrdu ? "محفوظ کم از کم:" : "Safe Min:"} ${refMin}`,
               position: "right",
               fontSize: 10,
-              fill: "#22c55e",
+              fill: "#10b981",
+              fontWeight: "bold",
             }}
           />
         )}
         {refMax != null && (
           <ReferenceLine
             y={refMax}
-            stroke="#22c55e"
-            strokeDasharray="6 4"
-            strokeWidth={1}
+            stroke="#10b981"
+            strokeDasharray="5 3"
+            strokeWidth={1.5}
             label={{
-              value: `Max: ${refMax}`,
+              value: `${isUrdu ? "محفوظ زیادہ سے زیادہ:" : "Safe Max:"} ${refMax}`,
               position: "right",
               fontSize: 10,
-              fill: "#22c55e",
+              fill: "#10b981",
+              fontWeight: "bold",
             }}
           />
         )}
 
-        {/* Custom reference lines (e.g., diabetes threshold) */}
+        {/* Custom threshold lines */}
         {refLines?.map((rl) => (
           <ReferenceLine
             key={rl.value}
             y={rl.value}
             stroke={rl.color}
-            strokeDasharray="8 4"
+            strokeDasharray="6 4"
             strokeWidth={1.5}
             label={{
               value: rl.label,
               position: "right",
               fontSize: 10,
               fill: rl.color,
+              fontWeight: "bold",
             }}
           />
         ))}
@@ -154,10 +180,10 @@ export function BiomarkerLineChart({
         <Line
           type="monotone"
           dataKey="value"
-          stroke="hsl(221, 83%, 53%)"
-          strokeWidth={2.5}
-          dot={{ r: 5, fill: "hsl(221, 83%, 53%)", strokeWidth: 2 }}
-          activeDot={{ r: 7 }}
+          stroke="#0D5C4A"
+          strokeWidth={3}
+          dot={{ r: 5, fill: "#0D5C4A", stroke: "#FFFFFF", strokeWidth: 2 }}
+          activeDot={{ r: 7, fill: "#0A8C6A" }}
           name={metricName}
         />
       </LineChart>
@@ -175,9 +201,11 @@ interface LipidLine {
 
 interface MultiChartProps {
   lines: LipidLine[];
+  locale?: string;
+  ldlTargetLabel?: string;
+  hdlMinLabel?: string;
 }
 
-/** Merge all line data by date for Recharts. */
 function mergeLipidData(lines: LipidLine[]) {
   const dateMap = new Map<
     string,
@@ -200,28 +228,36 @@ function MultiTooltip({
   payload,
   label,
   lines,
+  locale = "en",
 }: {
   active?: boolean;
   payload?: Array<{ dataKey: string; value: number }>;
   label?: string;
   lines: LipidLine[];
+  locale?: string;
 }) {
   if (!active || !payload?.length) return null;
+  const isUrdu = locale === "ur";
+  const formattedDate = (() => {
+    const raw = label ?? "";
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? raw : d.toLocaleDateString(isUrdu ? "ur-PK" : "en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  })();
+
   return (
-    <div className="rounded-lg border bg-background px-3 py-2 shadow-md">
-      <p className="mb-1 text-xs font-medium text-muted-foreground">
-        {new Date(label ?? "").toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        })}
+    <div className="rounded-lg border border-vault-border bg-card px-3 py-2 shadow-lg dark:border-border">
+      <p className="mb-1 text-[10px] font-bold uppercase text-muted-foreground">
+        {formattedDate}
       </p>
       {payload.map((p) => {
         const line = lines.find((l) => l.key === p.dataKey);
         return (
-          <p key={p.dataKey} className="text-sm" style={{ color: line?.color }}>
-            <span className="font-semibold">{line?.label}:</span> {p.value}{" "}
-            mg/dL
+          <p key={p.dataKey} className="text-xs font-bold" style={{ color: line?.color }}>
+            <span>{line?.label}:</span> {p.value} mg/dL
           </p>
         );
       })}
@@ -229,8 +265,14 @@ function MultiTooltip({
   );
 }
 
-export function LipidMultiChart({ lines }: MultiChartProps) {
+export function LipidMultiChart({
+  lines,
+  locale = "en",
+  ldlTargetLabel = "Safe LDL Target <100",
+  hdlMinLabel = "Safe HDL Min >40",
+}: MultiChartProps) {
   const merged = mergeLipidData(lines);
+  const isUrdu = locale === "ur";
 
   return (
     <ResponsiveContainer width="100%" height={320}>
@@ -238,54 +280,59 @@ export function LipidMultiChart({ lines }: MultiChartProps) {
         data={merged}
         margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
       >
-        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+        <CartesianGrid strokeDasharray="3 3" className="stroke-muted/60" />
         <XAxis
           dataKey="test_date"
-          tickFormatter={(v: string) =>
-            new Date(v).toLocaleDateString("en-US", {
-              month: "short",
-              year: "2-digit",
-            })
-          }
-          className="text-xs"
-          tick={{ fontSize: 12 }}
+          tickFormatter={(v: string) => {
+            const d = new Date(v);
+            return isNaN(d.getTime())
+              ? v
+              : d.toLocaleDateString(isUrdu ? "ur-PK" : "en-US", {
+                  month: "short",
+                  year: "2-digit",
+                });
+          }}
+          className="text-xs font-semibold"
+          tick={{ fontSize: 11, fill: "currentColor" }}
         />
         <YAxis
           domain={["auto", "auto"]}
-          tick={{ fontSize: 12 }}
+          tick={{ fontSize: 11, fill: "currentColor" }}
           label={{
             value: "mg/dL",
             angle: -90,
             position: "insideLeft",
-            style: { fontSize: 11 },
+            style: { fontSize: 11, fontWeight: "bold", fill: "#0D5C4A" },
           }}
         />
-        <Tooltip content={<MultiTooltip lines={lines} />} />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Tooltip content={<MultiTooltip lines={lines} locale={locale} />} />
+        <Legend wrapperStyle={{ fontSize: 12, fontWeight: "bold" }} />
 
-        {/* Reference lines for LDL */}
+        {/* Reference lines for Lipid panel */}
         <ReferenceLine
           y={100}
-          stroke="#ef4444"
-          strokeDasharray="6 4"
-          strokeWidth={1}
+          stroke="#C0392B"
+          strokeDasharray="5 3"
+          strokeWidth={1.5}
           label={{
-            value: "LDL target <100",
+            value: ldlTargetLabel,
             position: "right",
             fontSize: 10,
-            fill: "#ef4444",
+            fill: "#C0392B",
+            fontWeight: "bold",
           }}
         />
         <ReferenceLine
           y={40}
-          stroke="#22c55e"
-          strokeDasharray="6 4"
-          strokeWidth={1}
+          stroke="#10b981"
+          strokeDasharray="5 3"
+          strokeWidth={1.5}
           label={{
-            value: "HDL target >40",
+            value: hdlMinLabel,
             position: "right",
             fontSize: 10,
-            fill: "#22c55e",
+            fill: "#10b981",
+            fontWeight: "bold",
           }}
         />
 

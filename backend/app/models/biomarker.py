@@ -1,5 +1,5 @@
 # HealthVault AI — Biomarker ORM Model
-# Maps to PostgreSQL 'biomarkers' time-series table
+# Maps to PostgreSQL 'biomarkers' time-series table for dynamic clinical analytes
 
 import uuid
 from datetime import date, datetime
@@ -20,6 +20,7 @@ class Biomarker(Base):
     __tablename__ = "biomarkers"
     __table_args__ = (
         Index("idx_biomarkers_timeline", "user_id", "biomarker_name", "test_date"),
+        Index("idx_biomarkers_category", "user_id", "category"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -39,17 +40,21 @@ class Biomarker(Base):
         ForeignKey("medical_records.id", ondelete="CASCADE"),
         nullable=True,
     )
-    biomarker_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    biomarker_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    category: Mapped[str] = mapped_column(String(64), nullable=False, default="Other")
     value: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
-    unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    value_text: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    unit: Mapped[str] = mapped_column(String(32), nullable=False, default="")
     reference_min: Mapped[Optional[float]] = mapped_column(
         Numeric(10, 2), nullable=True
     )
     reference_max: Mapped[Optional[float]] = mapped_column(
         Numeric(10, 2), nullable=True
     )
-    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    ref_range_text: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")
     test_date: Mapped[date] = mapped_column(Date, nullable=False)
+    lab_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

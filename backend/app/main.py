@@ -1,3 +1,4 @@
+# HealthVault AI FastAPI Application
 from contextlib import asynccontextmanager
 import logging
 from pathlib import Path
@@ -8,7 +9,9 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.api.router import api_router
+from app.core.database import Base, engine
 from app.services.storage_service import storage_service
+import app.models  # noqa: F401
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -19,11 +22,16 @@ logger = logging.getLogger("healthvault")
 async def lifespan(app: FastAPI):
     """Lifespan event handler for startup and shutdown actions."""
     logger.info(f"Starting {settings.PROJECT_NAME} in {settings.ENVIRONMENT} mode...")
+    # Ensure all database tables exist
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database schema validated and tables verified.")
     # Ensure the local uploads directory exists before serving files
     await storage_service.ensure_directory()
     logger.info(f"Uploads directory ready at '{settings.UPLOAD_DIR}/'")
     yield
     logger.info(f"Shutting down {settings.PROJECT_NAME}...")
+
 
 
 def create_application() -> FastAPI:

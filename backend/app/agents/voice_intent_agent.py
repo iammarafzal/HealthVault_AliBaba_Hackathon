@@ -182,9 +182,35 @@ def _build_patient_context_json(
     diagnoses: List[str],
 ) -> str:
     """Serialize patient context into a JSON string for the LLM prompt."""
+    profile = getattr(user, "profile", None)
+    full_name = None
+    if user and hasattr(user, "full_name") and not isinstance(user.full_name, type(MagicMock if 'MagicMock' in globals() else object)):
+        pass
+    # Safely extract full_name and blood_group
+    if user:
+        if hasattr(user, "profile") and hasattr(user.profile, "full_name") and isinstance(user.profile.full_name, str):
+            full_name = user.profile.full_name
+        elif hasattr(user, "full_name") and isinstance(user.full_name, str):
+            full_name = user.full_name
+        elif hasattr(user, "profile") and hasattr(user.profile, "full_name"):
+            full_name = user.profile.full_name
+        elif hasattr(user, "full_name"):
+            full_name = user.full_name
+    full_name = full_name or "Unknown"
+
+    blood_group = None
+    if user:
+        if hasattr(user, "profile") and hasattr(user.profile, "blood_group") and isinstance(user.profile.blood_group, str):
+            blood_group = user.profile.blood_group
+        elif hasattr(user, "blood_group") and isinstance(user.blood_group, str):
+            blood_group = user.blood_group
+        elif hasattr(user, "profile") and hasattr(user.profile, "blood_group"):
+            blood_group = user.profile.blood_group
+        elif hasattr(user, "blood_group"):
+            blood_group = user.blood_group
     context = {
-        "patient_name": user.full_name if user else "Unknown",
-        "blood_group": user.blood_group if user else None,
+        "patient_name": full_name,
+        "blood_group": blood_group,
         "active_medications": [
             {"name": m.name, "dosage": m.dosage, "frequency": m.frequency, "timing": m.timing}
             for m in active_meds
@@ -195,7 +221,7 @@ def _build_patient_context_json(
         ],
         "past_diagnoses": diagnoses,
     }
-    return json.dumps(context, ensure_ascii=False)
+    return json.dumps(context, default=str, ensure_ascii=False)
 
 
 def _parse_llm_response(

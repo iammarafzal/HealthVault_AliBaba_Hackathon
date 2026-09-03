@@ -26,8 +26,22 @@ MEDICAL_EXTRACTION_SYSTEM_PROMPT = (
 LAB_EXTRACTION_SYSTEM_PROMPT = (
     "Lab report extraction agent. Extract biomarkers from OCR text into JSON. "
     "Rules: RAW JSON only—no markdown, no explanation. "
+    "Top-level keys: test_name (panel/test title), test_date (ISO YYYY-MM-DD), "
+    "hospital_name (lab/hospital name), biomarkers (array). "
     "Per biomarker: biomarker_name, value, unit, reference_min, reference_max, "
     "status (low|normal|high), test_date. Missing values: null."
+)
+
+DISCHARGE_EXTRACTION_SYSTEM_PROMPT = (
+    "Hospital discharge summary extraction agent. Analyze OCR text and extract strictly "
+    "into JSON schema. Rules: RAW JSON only—no markdown, no explanation. Missing values: "
+    "omit key or null. Keys: doctor_name, hospital_name, consultation_date (ISO YYYY-MM-DD "
+    "of admission/discharge), diagnoses (primary diagnoses array), surgical_notes (array of "
+    "procedure/operative findings), medications (name, dosage, frequency, timing, "
+    "instructions_en, instructions_ur, is_active), allergies (allergen, severity, "
+    "reaction_details), follow_up_instructions (array of post-discharge clinical "
+    "instructions). Translate Latin shorthand (BD, TDS, OD, PC, AC) to plain English in "
+    "instructions_en."
 )
 
 
@@ -97,14 +111,15 @@ async def lab_extraction_node(state: MedicalAgentState) -> Dict[str, Any]:
 
 
 async def clinical_summary_extraction_node(state: MedicalAgentState) -> Dict[str, Any]:
-    """Extract diagnoses, medications, and clinical notes from discharge summary OCR text."""
+    """Extract diagnoses, surgical notes, medications, and follow-up instructions from
+    discharge summary OCR text."""
     raw_text = state.get("raw_ocr_text", "")
     if not raw_text:
         return {"errors": ["No OCR text provided for discharge summary extraction"]}
 
     provider = get_llm_provider()
     prompt = f"Input OCR Text: \"{raw_text}\"\n\nDocument type: discharge_summary"
-    result = await provider.generate_json(prompt, MEDICAL_EXTRACTION_SYSTEM_PROMPT)
+    result = await provider.generate_json(prompt, DISCHARGE_EXTRACTION_SYSTEM_PROMPT)
 
     if not result:
         return {"errors": ["LLM extraction failed for discharge summary"]}

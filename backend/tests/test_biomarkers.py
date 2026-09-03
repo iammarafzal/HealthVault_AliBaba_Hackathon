@@ -36,12 +36,12 @@ def test_normalize_name():
     assert _normalize_name("triglycerides") == ("Triglycerides", "Lipid Profile")
 
     # CBC aliases
-    assert _normalize_name("hb") == ("Hemoglobin", "CBC")
-    assert _normalize_name("platelets") == ("Platelets", "CBC")
-    assert _normalize_name("wbc") == ("WBC", "CBC")
+    assert _normalize_name("hb") == ("Hemoglobin", "Complete Blood Count")
+    assert _normalize_name("platelets") == ("Platelet Count", "Complete Blood Count")
+    assert _normalize_name("wbc") == ("WBC Count", "Complete Blood Count")
 
-    # Unknown alias fallback
-    assert _normalize_name("vitamin d3") == ("Vitamin D3", "Other")
+    # Vitamins alias
+    assert _normalize_name("vitamin d3") == ("Vitamin D (25-OH)", "Vitamins")
 
 
 def test_compute_trend():

@@ -20,12 +20,20 @@ export interface AlertAction {
 interface StructuredAlertCardProps {
   title: string;
   description: string;
-  intent: "medication_schedule" | "symptom_log" | "allergy_check";
+  intent: "medication_schedule" | "symptom_log" | "allergy_check" | (string & {});
   actions?: AlertAction[];
   onAction?: (action: AlertAction) => void;
 }
 
-const intentConfig = {
+const defaultConfig = {
+  icon: AlertTriangle,
+  color: "text-muted-foreground",
+  bg: "bg-muted/30",
+  borderColor: "border-border",
+  badgeLabel: "Info",
+};
+
+const intentConfig: Record<string, typeof defaultConfig> = {
   medication_schedule: {
     icon: Pill,
     color: "text-blue-500",
@@ -60,7 +68,7 @@ export default function StructuredAlertCard({
   actions,
   onAction,
 }: StructuredAlertCardProps) {
-  const config = intentConfig[intent];
+  const config = intentConfig[intent] || defaultConfig;
   const Icon = config.icon;
 
   return (

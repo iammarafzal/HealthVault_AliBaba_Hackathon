@@ -1,6 +1,7 @@
 # HealthVault AI — Doctor Summary Routes
 # GET /api/v1/summary/generate — Generates a concise 1-page clinical summary for physicians
 
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -11,6 +12,8 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.mock_data import MOCK_DOCTOR_SUMMARY
 from app.schemas.summary import DoctorSummaryResponse
+
+logger = logging.getLogger("healthvault")
 
 router = APIRouter(prefix="/summary", tags=["Doctor Summary"])
 
@@ -40,7 +43,8 @@ async def generate_doctor_summary(
             detail=str(exc),
         ) from exc
     except Exception as exc:
+        logger.exception("Clinical summary generation failed: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate clinical summary. Please try again.",
+            detail=f"Failed to generate clinical summary: {exc}",
         ) from exc

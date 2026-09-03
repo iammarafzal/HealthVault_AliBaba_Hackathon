@@ -1,41 +1,48 @@
-# HealthVault AI — Backend Dependencies
-# Install: pip install -r requirements.txt
+# ==============================================================================
+# HealthVault AI — Backend Service Dependencies
+# ==============================================================================
+# Install with: pip install -r requirements.txt
+# ==============================================================================
 
-# Web Framework
-fastapi
-uvicorn[standard]
+# ── Web Framework & ASGI Server ──────────────────────────────────────────────
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
 
-# Database
-sqlalchemy[asyncio]
-asyncpg
-alembic
+# ── Database, ORM & Migrations ───────────────────────────────────────────────
+sqlalchemy[asyncio]>=2.0.28
+asyncpg>=0.29.0
+alembic>=1.13.1
 
-# Pydantic & Validation
-pydantic[email]
-pydantic-settings
+# ── Data Validation & Settings ───────────────────────────────────────────────
+pydantic[email]>=2.6.4
+pydantic-settings>=2.2.1
 
-# Authentication & Security
-python-jose[cryptography]
-passlib[bcrypt]
-python-multipart
+# ── Authentication & Cryptography ───────────────────────────────────────────
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.9
 
-# Alibaba Cloud Services
-dashscope
-oss2
+# ── LLM, Agent Workflows & Voice ASR ────────────────────────────────────────
+dashscope>=1.17.0
+groq>=0.5.0
+langgraph>=0.0.30
+langchain-core>=0.1.30
+langchain-google-genai>=1.0.0
 
-# AI / OCR / Agents
-paddleocr
-paddlepaddle
-langgraph
-langchain-core
-pypdf
-groq
+# ── Document Parsing, OCR & Imaging ──────────────────────────────────────────
+paddleocr>=2.7.3
+paddlepaddle>=2.6.0
+pypdf>=4.1.0
+pillow>=10.2.0
 
-# Utilities & Networking
-python-dotenv
-httpx
-aiofiles
+# ── Cloud Object Storage (Alibaba Cloud OSS) ─────────────────────────────────
+oss2>=2.18.4
 
-# Testing & Development
-pytest
-pytest-asyncio
+# ── Async Networking & Utilities ────────────────────────────────────────────
+python-dotenv>=1.0.1
+httpx>=0.27.0
+aiofiles>=23.2.1
+
+# ── Testing & Code Quality ──────────────────────────────────────────────────
+pytest>=8.1.1
+pytest-asyncio>=0.23.6

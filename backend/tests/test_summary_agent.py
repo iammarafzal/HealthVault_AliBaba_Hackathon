@@ -22,12 +22,15 @@ def _create_mock_user(user_id: uuid.UUID) -> User:
     user = User(
         id=user_id,
         email="patient@example.com",
-        full_name="Ahmad Raza",
         health_id="HV-98214",
+        full_name="Ahmad Raza",
         gender="male",
         date_of_birth=date(1982, 5, 14),
         blood_group="B+",
+        emergency_contacts=[],
+        emergency_enabled=True,
     )
+    user.privacy_settings = None
     return user
 
 

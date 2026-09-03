@@ -1,4 +1,8 @@
-# Python
+# ==============================================================================
+# HealthVault AI — Git Ignore Rules
+# ==============================================================================
+
+# ── Python & Bytecode ────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
@@ -20,7 +24,7 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environments
+# ── Virtual Environments ─────────────────────────────────────────────────────
 .venv/
 venv/
 env/
@@ -28,7 +32,7 @@ ENV/
 env.bak/
 venv.bak/
 
-# Environment Variables & Secrets
+# ── Environment Variables & Secrets ──────────────────────────────────────────
 .env
 .env.local
 .env.*.local
@@ -36,7 +40,7 @@ venv.bak/
 !.env.example
 !backend/.env.example
 
-# Testing & Coverage
+# ── Testing & Code Coverage ──────────────────────────────────────────────────
 .pytest_cache/
 .coverage
 .coverage.*
@@ -46,21 +50,26 @@ coverage.xml
 *.cover
 .hypothesis/
 
-# Logs & Databases
+# ── Logs & Local Databases ───────────────────────────────────────────────────
 *.log
 logs/
 *.sqlite
 *.sqlite3
 *.db
 
-# Temporary & Upload storage
-uploads/
+# ── Uploads & Temporary Media ────────────────────────────────────────────────
+uploads/*
+!uploads/.gitkeep
+!uploads/**/.gitkeep
+backend/uploads/*
+!backend/uploads/.gitkeep
+!backend/uploads/**/.gitkeep
 storage/
 tmp/
 temp/
 media/
 
-# IDEs & Editors
+# ── IDEs, Editors & OS Files ─────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
@@ -68,8 +77,6 @@ media/
 *~
 *.sublime-project
 *.sublime-workspace
-
-# OS specific
 .DS_Store
 .DS_Store?
 ._*
@@ -78,11 +85,21 @@ media/
 ehthumbs.db
 Thumbs.db
 
-# Frontend (for Next.js/Vite if added)
+# ── Frontend (Next.js & Node.js) ─────────────────────────────────────────────
 node_modules/
+frontend/node_modules/
 .next/
+frontend/.next/
 out/
+frontend/out/
 .turbo/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
+frontend/tsconfig.tsbuildinfo
+
+# ── Stitch Mockups & Generated Scratch Artifacts ──────────────────────────────
+stitch_screens/
+frontend/stitch_designs/

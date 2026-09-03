@@ -48,8 +48,8 @@ class TestEmergencyKeywords:
 class TestPatientContextJson:
     def test_build_context_with_data(self):
         user = MagicMock()
-        user.full_name = "Test Patient"
-        user.blood_group = "O+"
+        user.profile.full_name = "Test Patient"
+        user.profile.blood_group = "O+"
 
         med = MagicMock()
         med.name = "Metformin"
@@ -187,8 +187,8 @@ def mock_db():
 def mock_user():
     user = MagicMock()
     user.id = uuid.uuid4()
-    user.full_name = "Test Patient"
-    user.blood_group = "B+"
+    user.profile.full_name = "Test Patient"
+    user.profile.blood_group = "B+"
     return user
 
 
