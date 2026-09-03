@@ -11,11 +11,29 @@ from app.core.config import settings
 from app.api.router import api_router
 from app.core.database import Base, engine
 from app.services.storage_service import storage_service
+from app.services.notification_service import notification_service
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import app.models  # noqa: F401
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("healthvault")
+
+
+def _resolve_scheduler_timezone():
+    """Safely resolve scheduler timezone with fallback to UTC on Windows if needed."""
+    try:
+        import tzlocal
+        return tzlocal.get_localzone()
+    except Exception as ex:
+        logger.warning(f"Could not load local zone via tzlocal ({ex}). Checking Asia/Karachi or UTC fallback.")
+    try:
+        import zoneinfo
+        return zoneinfo.ZoneInfo("Asia/Karachi")
+    except Exception:
+        pass
+    from datetime import timezone
+    return timezone.utc
 
 
 @asynccontextmanager
@@ -29,7 +47,31 @@ async def lifespan(app: FastAPI):
     # Ensure the local uploads directory exists before serving files
     await storage_service.ensure_directory()
     logger.info(f"Uploads directory ready at '{settings.UPLOAD_DIR}/'")
+
+    # Initialize and start in-process APScheduler for medicine planner reminders
+    scheduler_tz = _resolve_scheduler_timezone()
+    scheduler = AsyncIOScheduler(timezone=scheduler_tz)
+    scheduler.add_job(
+        notification_service.check_and_dispatch_medicine_reminders,
+        "interval",
+        minutes=settings.NOTIFICATION_CHECK_INTERVAL_MINUTES,
+        id="medicine_reminder_job",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info(
+        f"APScheduler started: medicine reminders scheduled every {settings.NOTIFICATION_CHECK_INTERVAL_MINUTES} min."
+    )
+
     yield
+
+    # Shutdown scheduler
+    try:
+        scheduler.shutdown(wait=False)
+        logger.info("APScheduler stopped.")
+    except Exception as e:
+        logger.warning(f"Error shutting down scheduler: {e}")
+
     logger.info(f"Shutting down {settings.PROJECT_NAME}...")
 
 

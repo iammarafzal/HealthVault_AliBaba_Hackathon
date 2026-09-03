@@ -8,7 +8,7 @@ from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -257,7 +257,36 @@ class MedicationService:
         await db.refresh(med)
         return med
 
-    # ── Manual add ──────────────────────────────────────────────────
+    # ── Manual add, update, delete ──────────────────────────────────
+
+    def extract_time_slots(self, med: Medication) -> List[str]:
+        """Extract a clean list of time slots ('morning', 'afternoon', 'night') for a medication."""
+        if med.dosage_schedule and isinstance(med.dosage_schedule, dict):
+            if "time_slots" in med.dosage_schedule and isinstance(med.dosage_schedule["time_slots"], list):
+                return med.dosage_schedule["time_slots"]
+            slots = []
+            if med.dosage_schedule.get("morning"):
+                slots.append("morning")
+            if med.dosage_schedule.get("afternoon"):
+                slots.append("afternoon")
+            if med.dosage_schedule.get("evening") or med.dosage_schedule.get("night"):
+                slots.append("night")
+            if slots:
+                return slots
+
+        if med.timing:
+            t_lower = med.timing.lower()
+            slots = []
+            if "morn" in t_lower or "breakfast" in t_lower or "1-0-" in t_lower or "1-1-" in t_lower:
+                slots.append("morning")
+            if "noon" in t_lower or "afternoon" in t_lower or "lunch" in t_lower or "-1-" in t_lower:
+                slots.append("afternoon")
+            if "night" in t_lower or "even" in t_lower or "dinner" in t_lower or "-1" in t_lower:
+                slots.append("night")
+            if slots:
+                return slots
+
+        return ["morning"]
 
     async def add_manual_medication(
         self,
@@ -268,11 +297,31 @@ class MedicationService:
         frequency: str = "",
         timing: Optional[str] = None,
         dosage_schedule: Optional[Dict[str, Any]] = None,
+        time_slots: Optional[List[str]] = None,
         instructions_en: Optional[str] = None,
         instructions_ur: Optional[str] = None,
         is_active: bool = True,
     ) -> Medication:
         """Create a manually-entered medication (OTC / unlisted)."""
+        slots = time_slots or []
+        if slots:
+            m_flag = "morning" in slots
+            a_flag = "afternoon" in slots or "noon" in slots
+            e_flag = "night" in slots or "evening" in slots
+            dosage_schedule = dict(dosage_schedule or {})
+            dosage_schedule.update({
+                "morning": m_flag,
+                "afternoon": a_flag,
+                "evening": e_flag,
+                "frequency_per_day": len(slots),
+                "meal_relation": dosage_schedule.get("meal_relation", "unspecified"),
+                "time_slots": slots,
+            })
+            if not timing:
+                timing = ", ".join(slots)
+            if not frequency:
+                frequency = f"{len(slots)}x daily"
+
         med = Medication(
             user_id=user_id,
             record_id=None,  # manual — no linked prescription
@@ -284,11 +333,109 @@ class MedicationService:
             instructions_en=instructions_en,
             instructions_ur=instructions_ur,
             is_active=is_active,
+            is_manual=True,
         )
         db.add(med)
         await db.commit()
         await db.refresh(med)
         return med
+
+    async def update_manual_medication(
+        self,
+        db: AsyncSession,
+        user_id: UUID,
+        medication_id: UUID,
+        name: Optional[str] = None,
+        dosage: Optional[str] = None,
+        frequency: Optional[str] = None,
+        timing: Optional[str] = None,
+        dosage_schedule: Optional[Dict[str, Any]] = None,
+        time_slots: Optional[List[str]] = None,
+        instructions_en: Optional[str] = None,
+        instructions_ur: Optional[str] = None,
+        is_active: Optional[bool] = None,
+    ) -> Optional[Medication]:
+        """Update a manually-entered medication."""
+        stmt = select(Medication).where(
+            Medication.id == medication_id,
+            Medication.user_id == user_id,
+        )
+        res = await db.execute(stmt)
+        med = res.scalar_one_or_none()
+        if not med:
+            return None
+
+        if name is not None:
+            med.name = name
+        if dosage is not None:
+            med.dosage = dosage
+        if frequency is not None:
+            med.frequency = frequency
+        if instructions_en is not None:
+            med.instructions_en = instructions_en
+        if instructions_ur is not None:
+            med.instructions_ur = instructions_ur
+        if is_active is not None:
+            med.is_active = is_active
+
+        if time_slots is not None:
+            slots = time_slots
+            m_flag = "morning" in slots
+            a_flag = "afternoon" in slots or "noon" in slots
+            e_flag = "night" in slots or "evening" in slots
+            schedule = dict(med.dosage_schedule or {})
+            if dosage_schedule:
+                schedule.update(dosage_schedule)
+            schedule.update({
+                "morning": m_flag,
+                "afternoon": a_flag,
+                "evening": e_flag,
+                "frequency_per_day": len(slots),
+                "meal_relation": schedule.get("meal_relation", "unspecified"),
+                "time_slots": slots,
+            })
+            med.dosage_schedule = schedule
+            med.timing = ", ".join(slots)
+            if not frequency and not med.frequency:
+                med.frequency = f"{len(slots)}x daily"
+        elif dosage_schedule is not None:
+            med.dosage_schedule = dosage_schedule
+
+        if timing is not None:
+            med.timing = timing
+
+        db.add(med)
+        await db.commit()
+        await db.refresh(med)
+        return med
+
+    async def delete_manual_medication(
+        self,
+        db: AsyncSession,
+        user_id: UUID,
+        medication_id: UUID,
+    ) -> bool:
+        """Delete a manual medication and its dose logs."""
+        stmt = select(Medication).where(
+            Medication.id == medication_id,
+            Medication.user_id == user_id,
+        )
+        res = await db.execute(stmt)
+        med = res.scalar_one_or_none()
+        if not med:
+            return False
+
+        # Delete associated dose logs
+        await db.execute(
+            delete(MedicationDoseLog).where(
+                MedicationDoseLog.medication_id == medication_id,
+                MedicationDoseLog.user_id == user_id,
+            )
+        )
+
+        await db.delete(med)
+        await db.commit()
+        return True
 
     # ── Dose Logging (Today's adherence & persistence) ───────────────
 

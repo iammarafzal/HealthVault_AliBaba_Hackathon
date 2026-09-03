@@ -1,5 +1,5 @@
-# HealthVault AI — Models Package
-# Re-export all ORM models for Alembic auto-discovery and SQLAlchemy Base
+# HealthVault AI — Database Base & Model Registry
+# Used for Alembic migrations and central model discovery
 
 from app.core.database import Base  # noqa: F401
 from app.models.user import User  # noqa: F401

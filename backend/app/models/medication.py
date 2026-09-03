@@ -46,6 +46,9 @@ class Medication(Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", index=True
     )
+    is_manual: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", index=True
+    )
     prescription_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     start_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     end_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)

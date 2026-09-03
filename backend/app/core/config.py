@@ -72,6 +72,12 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GROQ_ASR_MODEL: str = "whisper-large-v3"
 
+    # Web Push Notifications & VAPID Configuration
+    VAPID_PUBLIC_KEY: str = "BCJEKWTCSiQeMeh0NIMvZvSu6w7skTcAMtQbACSLrETCXNaMMC2O8nXsuWMfgsLIPt-sYAcUphKS1yf7565YJ1Q"
+    VAPID_PRIVATE_KEY: str = "-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgZC3K3rjPVBk9DWMv\nZKfUAl5WdP+Ebho2q0My2OiJwPuhRANCAAQiRClkwkokHjHodDSDL2b0rusO7JE3\nADLUGwAki6xEwlzWjDAtjvJ17LljH4LCyD7frGAHFKYSktcn++euWCdU\n-----END PRIVATE KEY-----\n"
+    VAPID_CLAIM_EMAIL: str = "mailto:admin@healthvault.local"
+    NOTIFICATION_CHECK_INTERVAL_MINUTES: int = 5
+
     # CORS Settings (Accepts list or comma-separated string)
     CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:3000",

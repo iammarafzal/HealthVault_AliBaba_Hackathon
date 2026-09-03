@@ -17,8 +17,10 @@ if TYPE_CHECKING:
     from app.models.emergency_contact import EmergencyContact
     from app.models.emergency_scan import EmergencyScanLog
     from app.models.medication import Medication, MedicationDoseLog
+    from app.models.notification import PushSubscription
     from app.models.privacy import PrivacySettings
     from app.models.record import MedicalRecord
+    from app.models.user_schedule import PatientRoutineSchedule
 
 
 class User(Base):
@@ -101,4 +103,14 @@ class User(Base):
     )
     ice_contacts: Mapped[List["EmergencyContact"]] = relationship(
         "EmergencyContact", back_populates="user", cascade="all, delete-orphan", order_by="desc(EmergencyContact.is_primary), EmergencyContact.priority_order"
+    )
+    push_subscriptions: Mapped[List["PushSubscription"]] = relationship(
+        "PushSubscription", back_populates="user", cascade="all, delete-orphan"
+    )
+    routine_schedule: Mapped[Optional["PatientRoutineSchedule"]] = relationship(
+        "PatientRoutineSchedule",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )

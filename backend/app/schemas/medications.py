@@ -31,6 +31,8 @@ class MedicationDetailResponse(BaseModel):
     instructions_en: Optional[str] = None
     instructions_ur: Optional[str] = None
     is_active: bool = True
+    is_manual: bool = False
+    time_slots: List[str] = Field(default_factory=list)
     prescription_date: Optional[date] = None
     start_date: Optional[date] = None
     created_at: datetime
@@ -76,18 +78,34 @@ class ManualMedicationRequest(BaseModel):
     frequency: str = Field("", max_length=64)
     timing: Optional[str] = Field(None, max_length=64)
     dosage_schedule: Optional[DosageSchedulePayload] = None
+    time_slots: List[str] = Field(default_factory=list)
     instructions_en: Optional[str] = None
     instructions_ur: Optional[str] = None
     is_active: bool = True
 
 
+class ManualMedicationUpdate(BaseModel):
+    """Request body for PUT /medications/manual/{medication_id}."""
+    name: Optional[str] = Field(None, min_length=1, max_length=160)
+    dosage: Optional[str] = Field(None, max_length=64)
+    frequency: Optional[str] = Field(None, max_length=64)
+    timing: Optional[str] = Field(None, max_length=64)
+    dosage_schedule: Optional[DosageSchedulePayload] = None
+    time_slots: Optional[List[str]] = None
+    instructions_en: Optional[str] = None
+    instructions_ur: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
 class ManualMedicationResponse(BaseModel):
-    """Response after creating a manual medication entry."""
+    """Response after creating or updating a manual medication entry."""
     id: UUID
     name: str
     dosage: str
     is_active: bool
-    message: str = "Medication added successfully."
+    is_manual: bool = True
+    time_slots: List[str] = Field(default_factory=list)
+    message: str = "Medication saved successfully."
 
     model_config = ConfigDict(from_attributes=True)
 

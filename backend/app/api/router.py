@@ -9,6 +9,8 @@ from app.api.v1.emergency import router as emergency_router
 from app.api.v1.interactions import router as interactions_router
 from app.api.v1.interpreter import router as interpreter_router
 from app.api.v1.medications import router as medications_router
+from app.api.v1.notifications import router as notifications_router
+from app.api.v1.schedule import router as schedule_router
 from app.api.v1.summary import router as summary_router
 from app.api.v1.user import router as user_router
 from app.api.v1.vault import router as vault_router
@@ -27,6 +29,8 @@ api_router.include_router(biomarkers_router)
 api_router.include_router(voice_router)
 api_router.include_router(interpreter_router)
 api_router.include_router(medications_router)
+api_router.include_router(notifications_router)
+api_router.include_router(schedule_router)
 
 
 # Health check within v1
