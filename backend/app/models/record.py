@@ -5,7 +5,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, List, Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -36,7 +36,7 @@ class MedicalRecord(Base):
     document_url: Mapped[str] = mapped_column(Text, nullable=False)
     raw_ocr_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     extracted_data: Mapped[Any] = mapped_column(
-        JSONB, nullable=False, default=dict, server_default="'{}'::jsonb"
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
     consultation_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     doctor_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)

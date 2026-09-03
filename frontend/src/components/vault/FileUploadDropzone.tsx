@@ -1,10 +1,15 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  CheckCircle,
+  AlertCircle,
+  CheckCircle2,
   FileText,
   Loader2,
+  Lock,
+  ScanLine,
+  ShieldCheck,
+  Sparkles,
   UploadCloud,
   X,
 } from "lucide-react";
@@ -18,6 +23,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import type { VaultDocumentType } from "@/types/api";
+import LiveClinicalScanner, { type ProcessingStage } from "./LiveClinicalScanner";
+
+import { useLanguage } from "@/context/LanguageContext";
 
 const ACCEPTED_TYPES = [
   "application/pdf",
@@ -25,25 +34,6 @@ const ACCEPTED_TYPES = [
   "image/jpeg",
 ] as const;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
-
-type ProcessingStage =
-  | "idle"
-  | "uploading"
-  | "ocr_processing"
-  | "ai_extraction"
-  | "verification"
-  | "complete"
-  | "error";
-
-const stageLabels: Record<ProcessingStage, { en: string; ur: string }> = {
-  idle: { en: "", ur: "" },
-  uploading: { en: "Uploading document…", ur: "دستاویز اپ لوڈ ہو رہی ہے…" },
-  ocr_processing: { en: "OCR Processing…", ur: "او سی آر پروسیسنگ…" },
-  ai_extraction: { en: "AI Extraction…", ur: "اے آئی ایکسٹریکشن…" },
-  verification: { en: "Verifying results…", ur: "نتائج کی تصدیق…" },
-  complete: { en: "Extraction complete!", ur: "ایکسٹریکشن مکمل!" },
-  error: { en: "Extraction failed — using fallback data", ur: "ناکام — فال بیک ڈیٹا استعمال ہو رہا ہے" },
-};
 
 interface FileWithPreview {
   file: File;
@@ -56,6 +46,12 @@ interface FileUploadDropzoneProps {
   onExtract?: (files: File[]) => void;
   isExtracting?: boolean;
   processingStage?: ProcessingStage;
+  streamStep?: "reading" | "identifying" | "verifying" | "complete" | "error" | "idle";
+  percent?: number;
+  messageEn?: string;
+  messageUr?: string;
+  /** Increment to clear the selected files (e.g. after a successful upload). */
+  resetSignal?: number;
 }
 
 export default function FileUploadDropzone({
@@ -63,7 +59,13 @@ export default function FileUploadDropzone({
   onExtract,
   isExtracting = false,
   processingStage = "idle",
+  streamStep,
+  percent,
+  messageEn,
+  messageUr,
+  resetSignal,
 }: FileUploadDropzoneProps) {
+  const { locale, dir, t } = useLanguage();
   const [files, setFiles] = useState<FileWithPreview[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
 
@@ -128,217 +130,166 @@ export default function FileUploadDropzone({
     if (files.length) onExtract?.(files.map((f) => f.file));
   };
 
+  const clearFiles = () => {
+    setFiles((prev) => {
+      prev.forEach((f) => {
+        if (f.preview) URL.revokeObjectURL(f.preview);
+      });
+      return [];
+    });
+  };
+
+  /* Clear staged files when the parent signals a reset (post-upload). */
+  useEffect(() => {
+    if (resetSignal !== undefined && resetSignal > 0) {
+      clearFiles();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetSignal]);
+
   const isProcessing =
+    isExtracting ||
+    streamStep === "reading" ||
+    streamStep === "identifying" ||
+    streamStep === "verifying" ||
+    processingStage === "reading" ||
+    processingStage === "identifying" ||
+    processingStage === "verifying" ||
     processingStage === "uploading" ||
     processingStage === "ocr_processing" ||
     processingStage === "ai_extraction" ||
     processingStage === "verification";
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <UploadCloud className="h-5 w-5 text-primary" />
-          Upload Medical Documents
-        </CardTitle>
-        <CardDescription>
-          Drag & drop or browse — PDF, PNG, JPEG (max 10 MB each)
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        {/* Processing stage indicator */}
-        {processingStage !== "idle" && (
-          <div className="rounded-lg border p-4">
-            <div className="mb-3 flex items-center gap-3">
-              {isProcessing ? (
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              ) : processingStage === "complete" ? (
-                <CheckCircle className="h-5 w-5 text-emerald-500" />
-              ) : (
-                <X className="h-5 w-5 text-destructive" />
+    <Card className="w-full overflow-hidden border border-[#DCE8E5] dark:border-white/10 bg-white dark:bg-[#223431] shadow-xs">
+      <CardContent className="p-4 sm:p-5 space-y-4">
+        {/* ── Live Clinical Analysis State (When Processing) ── */}
+        {isProcessing ? (
+          <LiveClinicalScanner
+            stage={processingStage}
+            streamStep={streamStep}
+            percent={percent}
+            messageEn={messageEn}
+            messageUr={messageUr}
+            fileName={files[0]?.file.name}
+            previewUrl={files[0]?.preview}
+          />
+        ) : (
+          <>
+            {/* ── 3. Minimal Document Dropzone Area ── */}
+            <div
+              role="button"
+              tabIndex={0}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById("file-input")?.click()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ")
+                  document.getElementById("file-input")?.click();
+              }}
+              className={cn(
+                "group relative flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 sm:p-8 transition-all duration-200 text-center",
+                isDragActive
+                  ? "border-[#0D5C4A] bg-[#E8F7F4]/50 dark:bg-teal-950/30 scale-[1.005]"
+                  : "border-[#DCE8E5] dark:border-white/10 bg-[#F5F8F7]/60 dark:bg-zinc-900/40 hover:border-[#0D5C4A] dark:hover:border-[#0A8C6A] hover:bg-white dark:hover:bg-zinc-900"
               )}
-              <div>
-                <p className="text-sm font-medium">
-                  {stageLabels[processingStage].en}
-                </p>
-                <p className="text-xs text-muted-foreground" dir="rtl" lang="ur">
-                  {stageLabels[processingStage].ur}
-                </p>
+            >
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#E8F7F4] dark:bg-teal-950/60 text-[#0D5C4A] dark:text-[#0A8C6A] transition-all group-hover:scale-105">
+                <UploadCloud className="w-8 h-8 text-[#0D5C4A] dark:text-[#0A8C6A]" />
               </div>
+
+              <p className="mb-1 text-xs sm:text-sm font-bold text-[#1A2826] dark:text-white">
+                {t("vault.uploadMainText", "Click to upload or drag & drop files here")}
+              </p>
+
+              <p className="text-[11px] font-medium text-[#3D5450] dark:text-[#B2DFD4]">
+                {t("vault.uploadSubtext", "PDF, JPG, PNG (up to 10 MB)")}
+              </p>
+
+              <input
+                id="file-input"
+                type="file"
+                multiple
+                accept=".pdf,.png,.jpg,.jpeg"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.length) addFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
             </div>
 
-            {/* Progress steps */}
-            <div className="flex items-center gap-1">
-              {(
-                [
-                  "uploading",
-                  "ocr_processing",
-                  "ai_extraction",
-                  "verification",
-                ] as ProcessingStage[]
-              ).map((stage, idx) => {
-                const stageOrder = [
-                  "uploading",
-                  "ocr_processing",
-                  "ai_extraction",
-                  "verification",
-                ];
-                const currentIdx = stageOrder.indexOf(processingStage);
-                const isActive = idx <= currentIdx;
-                const isCurrent = stage === processingStage;
+            {/* ── 4. Selected File Queue Pills ── */}
+            {files.length > 0 && (
+              <div className="space-y-2.5 pt-2" dir={dir}>
+                <p className="text-xs font-bold uppercase tracking-wider text-[#3D5450] dark:text-[#B2DFD4]">
+                  {t("vault.readyForIngestion", "Ready for Processing")} ({files.length})
+                </p>
 
-                return (
-                  <div key={stage} className="flex flex-1 flex-col items-center gap-1">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {files.map(({ id, file, preview }) => (
                     <div
-                      className={cn(
-                        "h-1.5 w-full rounded-full transition-colors",
-                        isActive
-                          ? isCurrent
-                            ? "bg-primary animate-pulse"
-                            : "bg-primary/60"
-                          : "bg-muted"
-                      )}
-                    />
-                    <span
-                      className={cn(
-                        "text-[9px] font-medium",
-                        isActive
-                          ? "text-primary"
-                          : "text-muted-foreground"
-                      )}
+                      key={id}
+                      className="group flex items-center gap-3 rounded-xl border border-[#DCE8E5] dark:border-white/10 bg-white dark:bg-[#1A2826] p-3 shadow-2xs transition-all hover:border-[#0D5C4A]/40"
                     >
-                      {stage === "uploading"
-                        ? "Upload"
-                        : stage === "ocr_processing"
-                        ? "OCR"
-                        : stage === "ai_extraction"
-                        ? "Extract"
-                        : "Verify"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                      {preview ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={preview}
+                          alt={file.name}
+                          className="h-11 w-11 shrink-0 rounded-lg object-cover border border-[#DCE8E5] dark:border-white/10"
+                        />
+                      ) : (
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#E8F7F4] dark:bg-teal-950/60 text-[#0D5C4A] dark:text-[#0A8C6A]">
+                          <FileText className="h-5 w-5" />
+                        </div>
+                      )}
 
-        {/* Dropzone */}
-        <div
-          role="button"
-          tabIndex={0}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          onClick={() =>
-            document.getElementById("file-input")?.click()
-          }
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ")
-              document.getElementById("file-input")?.click();
-          }}
-          className={cn(
-            "flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors",
-            isDragActive
-              ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50"
-          )}
-        >
-          <UploadCloud
-            className={cn(
-              "mb-3 h-10 w-10",
-              isDragActive ? "text-primary" : "text-muted-foreground"
-            )}
-          />
-          <p className="mb-1 text-sm font-medium">
-            {isDragActive
-              ? "Drop files here…"
-              : "Click to browse or drag & drop"}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            PDF, PNG, JPEG up to 10 MB
-          </p>
-          <input
-            id="file-input"
-            type="file"
-            multiple
-            accept=".pdf,.png,.jpg,.jpeg"
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files?.length) addFiles(e.target.files);
-              e.target.value = "";
-            }}
-          />
-        </div>
+                      <div className="flex-1 overflow-hidden min-w-0">
+                        <p className="truncate text-xs font-bold text-[#1A2826] dark:text-white">
+                          {file.name}
+                        </p>
+                        <div className="flex items-center gap-1.5 text-[10px] text-[#3D5450] dark:text-[#B2DFD4]">
+                          <span>{formatSize(file.size)}</span>
+                          <span>•</span>
+                          <span className="font-semibold uppercase text-[#0D5C4A] dark:text-[#0A8C6A]">
+                            {file.type.split("/")[1]?.toUpperCase() || "DOCUMENT"}
+                          </span>
+                        </div>
+                      </div>
 
-        {/* File previews */}
-        {files.length > 0 && (
-          <div className="space-y-2">
-            {files.map(({ id, file, preview }) => (
-              <div
-                key={id}
-                className="flex items-center gap-3 rounded-lg border p-3"
-              >
-                {/* Thumbnail or icon */}
-                {preview ? (
-                  <img
-                    src={preview}
-                    alt={file.name}
-                    className="h-12 w-12 rounded object-cover"
-                  />
-                ) : (
-                  <div className="flex h-12 w-12 items-center justify-center rounded bg-muted">
-                    <FileText className="h-6 w-6 text-muted-foreground" />
-                  </div>
-                )}
-
-                {/* Metadata */}
-                <div className="flex-1 overflow-hidden">
-                  <p className="truncate text-sm font-medium">{file.name}</p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>{formatSize(file.size)}</span>
-                    <Badge variant="outline" className="text-[10px]">
-                      {file.type.split("/")[1]?.toUpperCase() ?? "FILE"}
-                    </Badge>
-                  </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                        onClick={() => removeFile(id)}
+                        title="Remove file"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
                 </div>
 
+                {/* Ingestion Trigger Button */}
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  onClick={() => removeFile(id)}
+                  onClick={handleExtract}
                   disabled={isProcessing}
+                  className="w-full bg-[#0D5C4A] hover:bg-[#0A8C6A] text-white text-xs sm:text-sm font-bold py-3 rounded-xl shadow-md active:scale-[0.99] transition-all flex items-center justify-center gap-2 mt-3"
                 >
-                  <X className="h-4 w-4" />
+                  <Sparkles className="h-4 w-4" />
+                  <span>
+                    {t("vault.analyzeButton", "Analyze & Extract Medical Details")} ({files.length}{" "}
+                    {files.length === 1
+                      ? t("vault.documentSingular", "Document")
+                      : t("vault.documentPlural", "Documents")}
+                    )
+                  </span>
                 </Button>
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* Extract & Save */}
-        {files.length > 0 && (
-          <Button
-            onClick={handleExtract}
-            disabled={isExtracting || isProcessing}
-            className="w-full"
-          >
-            {isProcessing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processing…
-              </>
-            ) : isExtracting ? (
-              <>Extracting…</>
-            ) : (
-              <>
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Extract & Save ({files.length} file
-                {files.length !== 1 ? "s" : ""})
-              </>
             )}
-          </Button>
+          </>
         )}
       </CardContent>
     </Card>
