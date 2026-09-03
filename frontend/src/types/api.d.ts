@@ -527,6 +527,8 @@ export interface MedicationDetailResponse {
   instructions_en?: string | null;
   instructions_ur?: string | null;
   is_active: boolean;
+  is_manual?: boolean;
+  time_slots?: string[];
   prescription_date?: string | null;
   start_date?: string | null;
   created_at: string;
@@ -567,6 +569,19 @@ export interface ManualMedicationPayload {
   frequency?: string;
   timing?: string | null;
   dosage_schedule?: DosageSchedulePayload | null;
+  time_slots?: string[];
+  instructions_en?: string | null;
+  instructions_ur?: string | null;
+  is_active?: boolean;
+}
+
+export interface ManualMedicationUpdatePayload {
+  name?: string;
+  dosage?: string;
+  frequency?: string;
+  timing?: string | null;
+  dosage_schedule?: DosageSchedulePayload | null;
+  time_slots?: string[];
   instructions_en?: string | null;
   instructions_ur?: string | null;
   is_active?: boolean;
@@ -577,6 +592,8 @@ export interface ManualMedicationResponse {
   name: string;
   dosage: string;
   is_active: boolean;
+  is_manual?: boolean;
+  time_slots?: string[];
   message: string;
 }
 

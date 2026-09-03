@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Plus_Jakarta_Sans, JetBrains_Mono, Noto_Nastaliq_Urdu, Noto_Sans_Arabic } from "next/font/google";
 import { ThemeProvider } from "@/components/ui/theme-provider";
+import { ToastProvider } from "@/components/ui/toast";
 import { AuthProvider } from "@/context/AuthContext";
 import { LanguageProvider } from "@/context/LanguageContext";
 import "./globals.css";
@@ -63,7 +64,9 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <LanguageProvider>
-            <AuthProvider>{children}</AuthProvider>
+            <AuthProvider>
+              <ToastProvider>{children}</ToastProvider>
+            </AuthProvider>
           </LanguageProvider>
         </ThemeProvider>
       </body>

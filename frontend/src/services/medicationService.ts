@@ -53,6 +53,23 @@ export async function addManualMedication(
   return response as unknown as ManualMedicationResponse;
 }
 
+/** Update a manually-entered medicine. */
+export async function updateManualMedication(
+  medicationId: string,
+  payload: Partial<ManualMedicationPayload>
+): Promise<ManualMedicationResponse> {
+  const response = await apiClient.put(`/medications/manual/${medicationId}`, payload);
+  return response as unknown as ManualMedicationResponse;
+}
+
+/** Delete a manually-entered medicine. */
+export async function deleteManualMedication(
+  medicationId: string
+): Promise<{ message: string; id: string }> {
+  const response = await apiClient.delete(`/medications/manual/${medicationId}`);
+  return response as unknown as { message: string; id: string };
+}
+
 /** Fetch today's dose logs for the current user. */
 export async function getTodayDoseLogs(): Promise<TodayDoseLogsResponse> {
   const response = await apiClient.get("/medications/doses/today");
@@ -66,4 +83,5 @@ export async function toggleDoseLog(
   const response = await apiClient.post("/medications/doses/toggle", payload);
   return response as unknown as ToggleDoseLogResponse;
 }
+
 

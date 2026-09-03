@@ -178,7 +178,7 @@ export default function DoctorSummaryPrintView({
                 className={`font-semibold ${allergies.length > 0 ? "text-[#C0392B]" : "text-emerald-700"}`}
               >
                 {allergies.length > 0
-                  ? `⚠️ ${allergies.length} Documented (See Below)`
+                  ? `${allergies.length} Documented (See Below)`
                   : "NKDA (No Known Allergies)"}
               </span>
             </div>
