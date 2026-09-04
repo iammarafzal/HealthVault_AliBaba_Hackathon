@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -52,6 +52,36 @@ class EmergencyScanLog(Base):
         String(128),
         nullable=True,
     )
+    latitude: Mapped[Optional[float]] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    longitude: Mapped[Optional[float]] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    accuracy_meters: Mapped[Optional[float]] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    maps_url: Mapped[Optional[str]] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+    location_name: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    device_type: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+    is_gps_verified: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="false",
+    )
 
     # ── Relationships ──────────────────────────────────────────────
     user: Mapped["User"] = relationship("User", back_populates="emergency_scans")
+

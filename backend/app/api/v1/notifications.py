@@ -3,14 +3,19 @@
 
 import logging
 from typing import Optional
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
+from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.notification import (
+    NotificationListResponse,
+    NotificationResponse,
     PushSubscriptionCreate,
     PushSubscriptionResponse,
     TestPushRequest,
@@ -136,3 +141,120 @@ async def unsubscribe_push(
         "status": "unsubscribed",
         "deleted_count": deleted_count,
     }
+
+
+# ---------------------------------------------------------------------------
+# In-App Notifications Endpoints
+# ---------------------------------------------------------------------------
+@router.get(
+    "",
+    response_model=NotificationListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List in-app notifications for authenticated user",
+)
+async def list_notifications(
+    limit: int = Query(30, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> NotificationListResponse:
+    """Return recent notifications sorted by creation date descending with unread count."""
+    stmt = (
+        select(Notification)
+        .where(Notification.user_id == current_user.id)
+        .order_by(Notification.created_at.desc())
+        .limit(limit)
+    )
+    result = await db.scalars(stmt)
+    items = result.all()
+
+    unread_stmt = select(func.count(Notification.id)).where(
+        Notification.user_id == current_user.id,
+        Notification.is_read == False,
+    )
+    unread_count = await db.scalar(unread_stmt) or 0
+
+    return NotificationListResponse(
+        items=[NotificationResponse.model_validate(n) for n in items],
+        total=len(items),
+        unread_count=unread_count,
+    )
+
+
+@router.patch(
+    "/{notification_id}/read",
+    response_model=NotificationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Mark single notification as read",
+)
+async def mark_notification_read(
+    notification_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> NotificationResponse:
+    """Mark a single notification as read."""
+    stmt = select(Notification).where(
+        Notification.id == notification_id,
+        Notification.user_id == current_user.id,
+    )
+    notification = await db.scalar(stmt)
+    if not notification:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found.",
+        )
+    notification.is_read = True
+    await db.flush()
+    return NotificationResponse.model_validate(notification)
+
+
+@router.post(
+    "/mark-all-read",
+    status_code=status.HTTP_200_OK,
+    summary="Mark all user notifications as read",
+)
+async def mark_all_notifications_read(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Mark all unread notifications for current user as read."""
+    stmt = (
+        update(Notification)
+        .where(
+            Notification.user_id == current_user.id,
+            Notification.is_read == False,
+        )
+        .values(is_read=True)
+    )
+    res = await db.execute(stmt)
+    await db.flush()
+    return {
+        "status": "success",
+        "updated_count": res.rowcount,
+    }
+
+
+@router.delete(
+    "/{notification_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete an alert notification",
+)
+async def delete_notification(
+    notification_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Delete a specific notification."""
+    stmt = select(Notification).where(
+        Notification.id == notification_id,
+        Notification.user_id == current_user.id,
+    )
+    notification = await db.scalar(stmt)
+    if not notification:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found.",
+        )
+    await db.delete(notification)
+    await db.flush()
+    return {"status": "success", "message": "Notification deleted."}
+

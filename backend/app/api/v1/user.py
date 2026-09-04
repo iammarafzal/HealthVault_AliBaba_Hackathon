@@ -10,7 +10,8 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -245,6 +246,14 @@ async def get_emergency_scans(
             ip_address=s.ip_address or "unknown",
             user_agent=s.user_agent or "unknown",
             city=s.city,
+            latitude=s.latitude,
+            longitude=s.longitude,
+            accuracy_meters=s.accuracy_meters,
+            maps_url=s.maps_url,
+            location_name=s.location_name or s.city,
+            device_type=s.device_type,
+            is_gps_verified=bool(s.is_gps_verified),
+            location=s.location_name or s.city or (f"{s.latitude:.4f}, {s.longitude:.4f}" if (s.latitude is not None and s.longitude is not None) else None),
         )
         for s in scans
     ]
@@ -306,6 +315,7 @@ async def update_privacy_settings(
         show_emergency_notes=privacy_orm.show_emergency_notes,
         emergency_notes=privacy_orm.emergency_notes,
         enable_scan_alerts=privacy_orm.enable_scan_alerts,
+        enable_ice_scan_alerts=privacy_orm.enable_ice_scan_alerts,
         qr_revoked=privacy_orm.qr_revoked,
         updated_at=privacy_orm.updated_at,
     )
@@ -314,7 +324,40 @@ async def update_privacy_settings(
 # ---------------------------------------------------------------------------
 # ICE Emergency Contacts CRUD (Protected)
 # ---------------------------------------------------------------------------
-async def _sync_user_emergency_contacts_json(db: AsyncSession, user_id: UUID):
+async def _resolve_contact_binding(
+    db: AsyncSession,
+    contact_health_id: Optional[str],
+    phone: Optional[str],
+) -> tuple[Optional[str], Optional[UUID]]:
+    """Look up HealthVault user account by Health ID, email, or phone number."""
+    matched_user = None
+    clean_ident = (contact_health_id or "").strip()
+    if clean_ident:
+        matched_user = await db.scalar(
+            select(User).where(
+                or_(
+                    func.lower(User.health_id) == clean_ident.lower(),
+                    func.lower(User.email) == clean_ident.lower(),
+                )
+            )
+        )
+    if not matched_user and phone:
+        cleaned = phone.strip().replace(" ", "").replace("-", "")
+        if len(cleaned) >= 7:
+            matched_user = await db.scalar(
+                select(User).where(
+                    or_(
+                        User.phone.contains(cleaned[-10:] if len(cleaned) >= 10 else cleaned),
+                        User.phone == phone,
+                    )
+                )
+            )
+    if matched_user:
+        return matched_user.health_id, matched_user.id
+    return (clean_ident or None), None
+
+
+async def _sync_user_emergency_contacts_json(db: AsyncSession, user_id: UUID) -> None:
     """Synchronize user.emergency_contacts JSON column with emergency_contacts table."""
     stmt = (
         select(EmergencyContact)
@@ -333,6 +376,10 @@ async def _sync_user_emergency_contacts_json(db: AsyncSession, user_id: UUID):
                 "phone": c.phone,
                 "is_primary": c.is_primary,
                 "priority_order": c.priority_order,
+                "contact_health_id": c.contact_health_id,
+                "contact_user_id": str(c.contact_user_id) if c.contact_user_id else None,
+                "linked_user_id": str(c.contact_user_id) if c.contact_user_id else None,
+                "is_linked": bool(c.contact_user_id),
             }
             for c in contacts
         ]
@@ -361,6 +408,9 @@ async def get_emergency_contacts(
     # Fallback: if table is empty but user.emergency_contacts JSON has items, populate table
     if not contacts and current_user.emergency_contacts:
         for idx, c in enumerate(current_user.emergency_contacts):
+            h_id, u_id = await _resolve_contact_binding(
+                db, c.get("contact_health_id"), c.get("phone", "")
+            )
             new_c = EmergencyContact(
                 user_id=current_user.id,
                 name=c.get("name", "Contact"),
@@ -368,24 +418,40 @@ async def get_emergency_contacts(
                 phone=c.get("phone", ""),
                 is_primary=bool(c.get("is_primary", idx == 0)),
                 priority_order=c.get("priority_order", idx + 1),
+                contact_health_id=h_id,
+                contact_user_id=u_id,
             )
             db.add(new_c)
         await db.flush()
         result = await db.scalars(stmt)
         contacts = result.all()
 
-    return [
-        EmergencyContactResponse(
-            id=c.id,
-            user_id=c.user_id,
-            name=c.name,
-            relation=c.relation,
-            phone=c.phone,
-            is_primary=c.is_primary,
-            priority_order=c.priority_order,
+    response_list: List[EmergencyContactResponse] = []
+    for c in contacts:
+        # Re-resolve link if not already set
+        if not c.contact_user_id:
+            h_id, u_id = await _resolve_contact_binding(db, c.contact_health_id, c.phone)
+            if u_id:
+                c.contact_user_id = u_id
+                c.contact_health_id = h_id
+                await db.flush()
+
+        response_list.append(
+            EmergencyContactResponse(
+                id=c.id,
+                user_id=c.user_id,
+                contact_health_id=c.contact_health_id,
+                contact_user_id=c.contact_user_id,
+                linked_user_id=c.contact_user_id,
+                is_linked=bool(c.contact_user_id),
+                name=c.name,
+                relation=c.relation,
+                phone=c.phone,
+                is_primary=c.is_primary,
+                priority_order=c.priority_order,
+            )
         )
-        for c in contacts
-    ]
+    return response_list
 
 
 @router.post(
@@ -418,6 +484,9 @@ async def create_emergency_contact(
     # If first contact, make it primary automatically
     is_primary = body.is_primary or (current_count == 0)
 
+    # Resolve account binding via Health ID, Email, or phone
+    h_id, u_id = await _resolve_contact_binding(db, body.contact_health_id, body.phone)
+
     contact = EmergencyContact(
         user_id=current_user.id,
         name=body.name.strip(),
@@ -425,6 +494,8 @@ async def create_emergency_contact(
         phone=body.phone.strip(),
         is_primary=is_primary,
         priority_order=body.priority_order if body.priority_order > 1 else current_count + 1,
+        contact_health_id=h_id,
+        contact_user_id=u_id,
     )
     db.add(contact)
     await db.flush()
@@ -435,6 +506,10 @@ async def create_emergency_contact(
     return EmergencyContactResponse(
         id=contact.id,
         user_id=contact.user_id,
+        contact_health_id=contact.contact_health_id,
+        contact_user_id=contact.contact_user_id,
+        linked_user_id=contact.contact_user_id,
+        is_linked=bool(contact.contact_user_id),
         name=contact.name,
         relation=contact.relation,
         phone=contact.phone,
@@ -480,6 +555,15 @@ async def update_emergency_contact(
         for ec in existing_res.all():
             ec.is_primary = False
 
+    # Check if contact_health_id or phone changed
+    new_h_id = update_dict.get("contact_health_id", contact.contact_health_id)
+    new_phone = update_dict.get("phone", contact.phone)
+    if "contact_health_id" in update_dict or "phone" in update_dict:
+        h_id, u_id = await _resolve_contact_binding(db, new_h_id, new_phone)
+        contact.contact_health_id = h_id
+        contact.contact_user_id = u_id
+        update_dict.pop("contact_health_id", None)
+
     for field, value in update_dict.items():
         if value is not None:
             if isinstance(value, str):
@@ -494,6 +578,10 @@ async def update_emergency_contact(
     return EmergencyContactResponse(
         id=contact.id,
         user_id=contact.user_id,
+        contact_health_id=contact.contact_health_id,
+        contact_user_id=contact.contact_user_id,
+        linked_user_id=contact.contact_user_id,
+        is_linked=bool(contact.contact_user_id),
         name=contact.name,
         relation=contact.relation,
         phone=contact.phone,
@@ -666,3 +754,34 @@ async def delete_account(
         "status": "success",
         "message": "Account and all associated medical data permanently deleted.",
     }
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/v1/user/notified-ice (Protected)
+# ---------------------------------------------------------------------------
+class UpdateNotifiedIceRequest(BaseModel):
+    notified_ice_id: Optional[UUID] = None
+
+
+@router.put(
+    "/notified-ice",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Designate primary ICE contact for real-time scan alerts",
+)
+async def update_notified_ice(
+    body: UpdateNotifiedIceRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    """Designate which ICE contact (User UUID) should receive real-time scan notifications."""
+    current_user.notified_ice_id = body.notified_ice_id
+    await db.flush()
+    stmt = (
+        select(User)
+        .where(User.id == current_user.id)
+        .options(selectinload(User.privacy_settings))
+    )
+    user = await db.scalar(stmt)
+    return user
+

@@ -42,3 +42,28 @@ class TestPushResponse(BaseModel):
     status: str
     message: str
     sent_count: int
+
+
+# ---------------------------------------------------------------------------
+# In-App Notifications
+# ---------------------------------------------------------------------------
+class NotificationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    type: str  # EMERGENCY_SCAN, DOSE_REMINDER, INTERACTION_ALERT, SYSTEM
+    title_en: str
+    title_ur: str
+    message_en: str
+    message_ur: str
+    action_url: str
+    is_read: bool
+    created_at: datetime
+
+
+class NotificationListResponse(BaseModel):
+    items: list[NotificationResponse]
+    total: int
+    unread_count: int
+

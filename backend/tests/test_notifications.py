@@ -193,8 +193,9 @@ async def test_medicine_reminder_scheduler_job():
     # Clear previously dispatched memory cache
     notification_service._dispatched_reminders.clear()
 
-    # Mock slot to "morning" and mock _sync_send_push
-    with patch.object(notification_service, "get_current_time_slot", return_value="morning"), \
+    # Mock slot to "morning", due check to True, and mock _sync_send_push
+    with patch.object(notification_service, "get_user_time_slot", return_value="morning"), \
+         patch.object(notification_service, "is_dose_time_due", return_value=True), \
          patch.object(notification_service, "_sync_send_push", return_value=None):
         
         # 1. Run reminder check -> should dispatch 1 notification

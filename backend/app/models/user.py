@@ -5,7 +5,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, Date, DateTime, String, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from app.models.emergency_contact import EmergencyContact
     from app.models.emergency_scan import EmergencyScanLog
     from app.models.medication import Medication, MedicationDoseLog
-    from app.models.notification import PushSubscription
+    from app.models.notification import Notification, PushSubscription
     from app.models.privacy import PrivacySettings
     from app.models.record import MedicalRecord
     from app.models.user_schedule import PatientRoutineSchedule
@@ -68,6 +68,11 @@ class User(Base):
     emergency_token: Mapped[Optional[str]] = mapped_column(
         String(64), unique=True, index=True, nullable=True
     )
+    notified_ice_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -76,6 +81,12 @@ class User(Base):
     )
 
     # ── Relationships ──────────────────────────────────────────────
+    notified_ice: Mapped[Optional["User"]] = relationship(
+        "User",
+        remote_side="User.id",
+        foreign_keys=[notified_ice_id],
+        lazy="selectin",
+    )
     privacy_settings: Mapped[Optional["PrivacySettings"]] = relationship(
         "PrivacySettings",
         back_populates="user",
@@ -102,10 +113,21 @@ class User(Base):
         "EmergencyScanLog", back_populates="user", cascade="all, delete-orphan", order_by="desc(EmergencyScanLog.scanned_at)"
     )
     ice_contacts: Mapped[List["EmergencyContact"]] = relationship(
-        "EmergencyContact", back_populates="user", cascade="all, delete-orphan", order_by="desc(EmergencyContact.is_primary), EmergencyContact.priority_order"
+        "EmergencyContact",
+        primaryjoin="User.id == EmergencyContact.user_id",
+        foreign_keys="[EmergencyContact.user_id]",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="desc(EmergencyContact.is_primary), EmergencyContact.priority_order",
     )
     push_subscriptions: Mapped[List["PushSubscription"]] = relationship(
         "PushSubscription", back_populates="user", cascade="all, delete-orphan"
+    )
+    notifications: Mapped[List["Notification"]] = relationship(
+        "Notification",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="desc(Notification.created_at)",
     )
     routine_schedule: Mapped[Optional["PatientRoutineSchedule"]] = relationship(
         "PatientRoutineSchedule",

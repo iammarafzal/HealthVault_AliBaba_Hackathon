@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     # Local File Storage (served via FastAPI StaticFiles mount)
     UPLOAD_DIR: str = "uploads"
     SERVER_BASE_URL: str = "http://localhost:8000"
+    FRONTEND_URL: str = "http://localhost:3000"
 
     # Authentication & Security
     SECRET_KEY: str = "change-me-to-a-random-secret"

@@ -18,6 +18,7 @@ class EmergencyContactBase(BaseModel):
     phone: str = Field(..., min_length=7, max_length=30, examples=["+92-300-1234567"])
     is_primary: bool = False
     priority_order: int = 1
+    contact_health_id: Optional[str] = Field(None, max_length=100, description="HealthVault ID or email of contact")
 
     @field_validator("phone")
     @classmethod
@@ -40,6 +41,7 @@ class EmergencyContactUpdate(BaseModel):
     phone: Optional[str] = Field(None, min_length=7, max_length=30)
     is_primary: Optional[bool] = None
     priority_order: Optional[int] = None
+    contact_health_id: Optional[str] = Field(None, max_length=100)
 
     @field_validator("phone")
     @classmethod
@@ -56,6 +58,10 @@ class EmergencyContactResponse(EmergencyContactBase):
     """Serialized emergency contact returned to the client."""
     id: Optional[UUID] = None
     user_id: Optional[UUID] = None
+    contact_health_id: Optional[str] = None
+    contact_user_id: Optional[UUID] = None
+    linked_user_id: Optional[UUID] = None
+    is_linked: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -71,6 +77,7 @@ class UserProfileResponse(BaseModel):
     date_of_birth: Optional[date] = None
     gender: Optional[str] = None
     emergency_contacts: List[dict] = []
+    notified_ice_id: Optional[UUID] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -83,6 +90,7 @@ class UserProfileUpdate(BaseModel):
     date_of_birth: Optional[date] = None
     gender: Optional[str] = None
     emergency_contacts: Optional[List[dict]] = None
+    notified_ice_id: Optional[UUID] = None
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +110,7 @@ class PrivacySettings(BaseModel):
         description="Concise directive for first responders under 250 characters",
     )
     enable_scan_alerts: bool = True
+    enable_ice_scan_alerts: bool = True
     qr_revoked: bool = False
     updated_at: Optional[datetime] = None
 
@@ -126,11 +135,15 @@ class PrivacySettings(BaseModel):
         if hasattr(data, "__dict__"):
             if getattr(data, "enable_scan_alerts", None) is None:
                 setattr(data, "enable_scan_alerts", True)
+            if getattr(data, "enable_ice_scan_alerts", None) is None:
+                setattr(data, "enable_ice_scan_alerts", True)
             if getattr(data, "show_emergency_notes", None) is None:
                 setattr(data, "show_emergency_notes", True)
         elif isinstance(data, dict):
             if data.get("enable_scan_alerts") is None:
                 data["enable_scan_alerts"] = True
+            if data.get("enable_ice_scan_alerts") is None:
+                data["enable_ice_scan_alerts"] = True
             if data.get("show_emergency_notes") is None:
                 data["show_emergency_notes"] = True
         return data
@@ -146,6 +159,7 @@ class PrivacySettingsUpdate(BaseModel):
     show_emergency_notes: Optional[bool] = None
     emergency_notes: Optional[str] = None
     enable_scan_alerts: Optional[bool] = None
+    enable_ice_scan_alerts: Optional[bool] = None
     qr_revoked: Optional[bool] = None
 
     @field_validator("emergency_notes")
@@ -171,6 +185,7 @@ class PrivacySettingsResponse(BaseModel):
     show_emergency_notes: bool = True
     emergency_notes: Optional[str] = None
     enable_scan_alerts: bool = True
+    enable_ice_scan_alerts: bool = True
     qr_revoked: bool = False
     updated_at: Optional[datetime] = None
 
@@ -193,11 +208,15 @@ class PrivacySettingsResponse(BaseModel):
         if hasattr(data, "__dict__"):
             if getattr(data, "enable_scan_alerts", None) is None:
                 setattr(data, "enable_scan_alerts", True)
+            if getattr(data, "enable_ice_scan_alerts", None) is None:
+                setattr(data, "enable_ice_scan_alerts", True)
             if getattr(data, "show_emergency_notes", None) is None:
                 setattr(data, "show_emergency_notes", True)
         elif isinstance(data, dict):
             if data.get("enable_scan_alerts") is None:
                 data["enable_scan_alerts"] = True
+            if data.get("enable_ice_scan_alerts") is None:
+                data["enable_ice_scan_alerts"] = True
             if data.get("show_emergency_notes") is None:
                 data["show_emergency_notes"] = True
         return data
@@ -218,6 +237,7 @@ class UserResponse(BaseModel):
     gender: Optional[str] = None
     emergency_contacts: List[dict] = []
     emergency_enabled: bool = True
+    notified_ice_id: Optional[UUID] = None
     role: str = "patient"
     profile: Optional[UserProfileResponse] = None
     privacy: Optional[PrivacySettingsResponse] = Field(default=None, validation_alias="privacy_settings")
@@ -236,6 +256,7 @@ class UserResponse(BaseModel):
             date_of_birth = getattr(data, "date_of_birth", None)
             gender = getattr(data, "gender", None)
             contacts = getattr(data, "emergency_contacts", []) or []
+            notified_ice_id = getattr(data, "notified_ice_id", None)
             privacy = getattr(data, "privacy_settings", None)
 
             profile_obj = UserProfileResponse(
@@ -245,6 +266,7 @@ class UserResponse(BaseModel):
                 date_of_birth=date_of_birth,
                 gender=gender,
                 emergency_contacts=contacts,
+                notified_ice_id=notified_ice_id,
             )
 
             privacy_obj = None
@@ -259,6 +281,7 @@ class UserResponse(BaseModel):
                     show_emergency_notes=getattr(privacy, "show_emergency_notes", True),
                     emergency_notes=getattr(privacy, "emergency_notes", None),
                     enable_scan_alerts=getattr(privacy, "enable_scan_alerts", True),
+                    enable_ice_scan_alerts=getattr(privacy, "enable_ice_scan_alerts", True),
                     qr_revoked=getattr(privacy, "qr_revoked", False),
                     updated_at=getattr(privacy, "updated_at", None),
                 )
@@ -274,6 +297,7 @@ class UserResponse(BaseModel):
                 "gender": gender,
                 "emergency_contacts": contacts,
                 "emergency_enabled": getattr(data, "emergency_enabled", True),
+                "notified_ice_id": notified_ice_id,
                 "role": getattr(data, "role", "patient"),
                 "profile": profile_obj,
                 "privacy": privacy_obj,

@@ -1,6 +1,7 @@
 # HealthVault AI — Shared API Dependencies
 # get_current_user: extracts JWT from Bearer header, returns the User ORM object
 
+from typing import Optional
 from uuid import UUID
 
 from fastapi import Depends, Header, HTTPException, status
@@ -14,7 +15,7 @@ from app.models.user import User
 
 
 async def get_current_user(
-    authorization: str = Header(..., description="Bearer <JWT>"),
+    authorization: Optional[str] = Header(None, description="Bearer <JWT>"),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """Extract and verify Bearer JWT, fetch user from DB.

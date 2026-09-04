@@ -96,8 +96,8 @@ async def test_correct_health_id_and_token_returns_200():
     privacy = _make_mock_privacy(user.id)
 
     mock_db = AsyncMock()
-    # scalar calls: 1st = user lookup, 2nd = privacy lookup
-    mock_db.scalar.side_effect = [user, privacy]
+    # scalar calls: 1st = user lookup, 2nd = privacy lookup, 3rd = notified ICE lookup
+    mock_db.scalar.side_effect = [user, privacy, None]
 
     # db.scalars() returns a sync result with .all() method
     mock_scalars_result = MagicMock()

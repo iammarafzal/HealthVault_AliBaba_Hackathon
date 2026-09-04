@@ -48,6 +48,9 @@ class PrivacySettings(Base):
     enable_scan_alerts: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true"
     )
+    enable_ice_scan_alerts: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true"
+    )
     qr_revoked: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
