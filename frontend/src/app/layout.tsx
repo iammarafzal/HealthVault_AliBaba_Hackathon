@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/ui/theme-provider";
 import { ToastProvider } from "@/components/ui/toast";
 import { AuthProvider } from "@/context/AuthContext";
 import { LanguageProvider } from "@/context/LanguageContext";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const inter = Inter({
@@ -66,6 +67,7 @@ export default function RootLayout({
           <LanguageProvider>
             <AuthProvider>
               <ToastProvider>{children}</ToastProvider>
+              <Toaster position="top-right" richColors />
             </AuthProvider>
           </LanguageProvider>
         </ThemeProvider>

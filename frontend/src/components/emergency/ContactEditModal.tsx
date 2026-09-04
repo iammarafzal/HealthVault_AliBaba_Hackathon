@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { AlertCircle, Loader2, Phone, User, Users, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { AlertCircle, Check, Loader2, Phone, ShieldCheck, User, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useLanguage } from "@/context/LanguageContext";
@@ -27,13 +28,19 @@ export default function ContactEditModal({
   const { locale, t } = useLanguage();
   const isUrdu = locale === "ur";
 
+  const [mounted, setMounted] = useState(false);
   const [name, setName] = useState("");
   const [relationKey, setRelationKey] = useState("son");
   const [customRelation, setCustomRelation] = useState("");
   const [phone, setPhone] = useState("");
+  const [contactHealthId, setContactHealthId] = useState("");
   const [isPrimary, setIsPrimary] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const presetRelations = useMemo(
     () => [
@@ -55,6 +62,7 @@ export default function ContactEditModal({
     if (contact) {
       setName(contact.name || "");
       setPhone(contact.phone || "");
+      setContactHealthId(contact.contact_health_id || "");
       setIsPrimary(Boolean(contact.is_primary));
 
       const rawRelation = (contact.relation || "").trim().toLowerCase();
@@ -85,12 +93,13 @@ export default function ContactEditModal({
       setRelationKey("son");
       setCustomRelation("");
       setPhone("");
+      setContactHealthId("");
       setIsPrimary(false);
     }
     setError(null);
   }, [contact, isOpen, presetRelations]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,6 +137,7 @@ export default function ContactEditModal({
         relation: finalRelation,
         phone: phone.trim(),
         is_primary: isPrimary,
+        contact_health_id: contactHealthId.trim() || null,
       };
       await onSave(payload, contact?.id);
       onClose();
@@ -144,10 +154,10 @@ export default function ContactEditModal({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md min-h-screen h-screen w-screen overflow-y-auto">
+  return createPortal(
+    <div className="fixed inset-0 top-0 left-0 right-0 bottom-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md h-screen w-screen min-h-[100vh] min-w-[100vw] overflow-y-auto">
       <div
-        className="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4"
+        className="relative my-auto w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150"
         dir={isUrdu ? "rtl" : "ltr"}
       >
         {/* Clean Header */}
@@ -223,6 +233,41 @@ export default function ContactEditModal({
             )}
           </div>
 
+          {/* HealthVault ID or Email (Optional) */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 text-vault-teal dark:text-teal-400" />
+                <span>
+                  {isUrdu
+                    ? "شناختی نمبر یا ای میل (اختیاری)"
+                    : "HealthVault ID or Email (Optional)"}
+                </span>
+              </label>
+              {(contact?.is_linked ||
+                (contactHealthId.trim().length > 3 &&
+                  (contactHealthId.includes("@") ||
+                    contactHealthId.trim().toUpperCase().startsWith("HV-")))) && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                  <Check className="h-2.5 w-2.5" />
+                  <span>{isUrdu ? "کھاتہ منسلک ہے ✓" : "Account Linked ✓"}</span>
+                </span>
+              )}
+            </div>
+            <input
+              type="text"
+              value={contactHealthId}
+              onChange={(e) => setContactHealthId(e.target.value)}
+              placeholder="e.g. HV-PAK-10294 or son@example.com"
+              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs sm:text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-vault-teal transition-all font-mono"
+            />
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              {isUrdu
+                ? "ان کا اکاؤنٹ منسلک کریں تاکہ وہ اپنے ڈیش بورڈ پر فوری ہنگامی اسکین الرٹس وصول کر سکیں۔"
+                : "Link their account so they receive instant emergency scan alerts directly on their dashboard."}
+            </p>
+          </div>
+
           {/* Phone Number */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
@@ -277,6 +322,7 @@ export default function ContactEditModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

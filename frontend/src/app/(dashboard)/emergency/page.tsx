@@ -35,6 +35,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import WalletCardFront from "@/components/emergency/WalletCardFront";
 import EmergencyContactsCard from "@/components/emergency/EmergencyContactsCard";
 import EmergencyDataConfigCard from "@/components/emergency/EmergencyDataConfigCard";
+import EmergencyScanAlertRoutingCard from "@/components/settings/EmergencyScanAlertRoutingCard";
+import RecentScanHistoryTable from "@/components/emergency/RecentScanHistoryTable";
 import {
   createEmergencyContact,
   deleteEmergencyContact,
@@ -189,6 +191,7 @@ export default function EmergencyDashboardPage() {
     show_emergency_notes: true,
     emergency_notes: null,
     enable_scan_alerts: true,
+    enable_ice_scan_alerts: true,
     qr_revoked: qrData ? !qrData.emergency_enabled : false,
   };
 
@@ -399,131 +402,16 @@ export default function EmergencyDashboardPage() {
             isLoading={isLoading || isLoadingContacts}
           />
 
-          {/* ── Card 2: Emergency Scan Alerts ── */}
-          <Card className="border-border bg-card shadow-xs">
-            <CardHeader className="pb-3 border-b border-border/50">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <BellRing className="h-4 w-4 text-vault-teal dark:text-teal-400" />
-                  {t("emergency.scanAlertsTitle", "Emergency Scan Alerts")}
-                </CardTitle>
-                <Badge
-                  variant={currentPrivacy.enable_scan_alerts ? "default" : "secondary"}
-                  className={`text-[10px] ${currentPrivacy.enable_scan_alerts
-                    ? "bg-vault-teal text-white dark:bg-teal-600"
-                    : "text-muted-foreground"
-                    }`}
-                >
-                  {currentPrivacy.enable_scan_alerts
-                    ? t("emergency.scanAlertsActive", "Alerts Active")
-                    : t("emergency.scanAlertsMuted", "Alerts Muted")}
-                </Badge>
-              </div>
-              <CardDescription className="text-xs">
-                {t("emergency.scanAlertsSub", "Notify emergency contacts when your QR code is scanned.")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-4">
-              <div
-                onClick={() => handleTogglePrivacy("enable_scan_alerts")}
-                className={`flex items-center justify-between p-3.5 rounded-xl border transition-all duration-200 cursor-pointer select-none ${currentPrivacy.enable_scan_alerts
-                    ? "border-vault-teal/40 bg-vault-light/30 hover:bg-vault-light/50 dark:border-teal-500/30 dark:bg-vault-dark/40 dark:hover:bg-vault-dark/60 shadow-2xs"
-                    : "border-border/60 bg-muted/20 hover:bg-muted/40 opacity-80 hover:opacity-100"
-                  }`}
-              >
-                <span className="font-semibold text-xs sm:text-sm text-foreground block max-w-[80%]">
-                  {t("emergency.scanAlertsToggle", "Notify ICE contacts on physical scan")}
-                </span>
-                <div onClick={(e) => e.stopPropagation()}>
-                  <Switch
-                    checked={currentPrivacy.enable_scan_alerts}
-                    onCheckedChange={() => handleTogglePrivacy("enable_scan_alerts")}
-                    disabled={isLoading || isSaving}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* ── Card 2: Emergency Scan Alerting & ICE Routing ── */}
+          <EmergencyScanAlertRoutingCard />
 
           {/* ── Card 3: Recent Scan History ── */}
-          <Card className="border-border bg-card shadow-xs">
-            <CardHeader className="pb-3 border-b border-border/50">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base font-bold flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-vault-teal dark:text-teal-400" />
-                    {t("emergency.auditTitle", "Recent Scan History")}
-                  </CardTitle>
-                  <CardDescription className="text-xs mt-0.5">
-                    {t("emergency.auditSub", "Log of every time your emergency card was scanned.")}
-                  </CardDescription>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={refreshScans}
-                  disabled={isLoadingScans}
-                  className="h-8 text-xs font-semibold gap-1.5 rounded-lg"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${isLoadingScans ? "animate-spin" : ""}`} />
-                  {t("emergency.refreshScans", "Refresh")}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {isLoading ? (
-                <div className="space-y-2 py-2">
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                </div>
-              ) : scanLogs.length === 0 ? (
-                <div className="text-center py-8 rounded-xl border border-dashed border-border bg-muted/20">
-                  <ShieldCheck className="mx-auto h-8 w-8 text-muted-foreground/60 mb-2" />
-                  <p className="text-xs font-bold text-foreground">
-                    {t("emergency.noScans", "No scans recorded yet")}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {t("emergency.noScansSub", "When paramedics scan your card, the event will appear here.")}
-                  </p>
-                </div>
-              ) : (
-                <div className="max-h-[240px] overflow-y-auto overflow-x-auto rounded-xl border border-border/70 scrollbar-thin">
-                  <table className="w-full text-start text-xs relative" dir={isUrdu ? "rtl" : "ltr"}>
-                    <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-xs border-b border-border/70 text-muted-foreground font-semibold">
-                      <tr>
-                        <th className="p-2.5 px-3">{t("emergency.timestamp", "Timestamp")}</th>
-                        <th className="p-2.5">{t("emergency.deviceType", "Device Type")}</th>
-                        <th className="p-2.5">{t("emergency.ipAddress", "IP Address")}</th>
-                        <th className="p-2.5 px-3">{t("emergency.location", "Location")}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/50">
-                      {scanLogs.map((scan) => (
-                        <tr key={scan.id} className="hover:bg-muted/30 transition-colors">
-                          <td className="p-2.5 px-3 font-medium whitespace-nowrap">
-                            <span className="text-foreground block">{formatRelativeTime(scan.scanned_at)}</span>
-                            <span className="text-[10px] text-muted-foreground font-mono" dir="ltr">
-                              {new Date(scan.scanned_at).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </span>
-                          </td>
-                          <td className="p-2.5">{getDeviceBadge(scan.user_agent)}</td>
-                          <td className="p-2.5 font-mono text-[11px] text-muted-foreground" dir="ltr">
-                            {scan.ip_address}
-                          </td>
-                          <td className="p-2.5 px-3 text-muted-foreground">
-                            {scan.city || "Network / Cellular"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <RecentScanHistoryTable
+            scanLogs={scanLogs}
+            isLoading={isLoading}
+            isLoadingScans={isLoadingScans}
+            onRefresh={refreshScans}
+          />
 
           {/* ── Card 4: Security & Kill Switches ── */}
           <Card className="border-border bg-card shadow-xs">
@@ -684,8 +572,8 @@ export default function EmergencyDashboardPage() {
 
       {/* ── Confirmation Modal: Reset QR Code ── */}
       {showConfirmReset && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4" dir={isUrdu ? "rtl" : "ltr"}>
+        <div className="fixed inset-0 top-0 left-0 right-0 bottom-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md h-screen w-screen min-h-[100vh] min-w-[100vw] overflow-y-auto">
+          <div className="relative my-auto w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150" dir={isUrdu ? "rtl" : "ltr"}>
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
                 <AlertTriangle className="h-5 w-5" />

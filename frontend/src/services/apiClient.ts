@@ -13,6 +13,7 @@ const API_BASE_URL =
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },
@@ -41,11 +42,14 @@ apiClient.interceptors.response.use(
   (response) => response.data,
   (error) => {
     if (error?.response?.status === 401 && typeof window !== "undefined") {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      // Only redirect if not already on an auth page
       const path = window.location.pathname;
-      if (!path.startsWith("/login") && !path.startsWith("/register")) {
+      if (
+        !path.startsWith("/login") &&
+        !path.startsWith("/register") &&
+        !path.startsWith("/emergency")
+      ) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
         window.location.href = "/login";
       }
     }

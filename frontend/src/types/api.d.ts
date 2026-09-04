@@ -19,6 +19,7 @@ export interface EmergencyContactBase {
   phone: string;
   is_primary?: boolean;
   priority_order?: number;
+  contact_health_id?: string | null;
 }
 
 export interface EmergencyContactCreate extends EmergencyContactBase {}
@@ -29,14 +30,45 @@ export interface EmergencyContactUpdate {
   phone?: string;
   is_primary?: boolean;
   priority_order?: number;
+  contact_health_id?: string | null;
 }
 
 export interface EmergencyContactResponse extends EmergencyContactBase {
   id?: string;
   user_id?: string;
+  contact_health_id?: string | null;
+  contact_user_id?: string | null;
+  linked_user_id?: string | null;
+  is_linked?: boolean;
 }
 
 export type EmergencyContact = EmergencyContactResponse;
+
+export interface InAppNotification {
+  id: string;
+  user_id: string;
+  type: "EMERGENCY_SCAN" | "DOSE_REMINDER" | "INTERACTION_ALERT" | "SYSTEM" | string;
+  title_en: string;
+  title_ur: string;
+  message_en: string;
+  message_ur: string;
+  action_url: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface NotificationListResponse {
+  items: InAppNotification[];
+  total: number;
+  unread_count: number;
+}
+
+export interface SharedAlertStream {
+  patientName: string;
+  topic: string;
+  patientId?: string;
+  healthId?: string;
+}
 
 /** Fast 3-field onboarding registration payload */
 export interface UserRegisterPayload {
@@ -58,6 +90,7 @@ export interface UserProfileResponse {
   date_of_birth?: string;
   gender?: string;
   emergency_contacts: EmergencyContactResponse[];
+  notified_ice_id?: string | null;
 }
 
 /** Progressive onboarding partial update */
@@ -68,6 +101,7 @@ export interface UserProfileUpdate {
   date_of_birth?: string;
   gender?: string;
   emergency_contacts?: EmergencyContactCreate[];
+  notified_ice_id?: string | null;
 }
 
 /** Normalized user response from the backend */
@@ -81,6 +115,7 @@ export interface UserResponse {
   date_of_birth?: string;
   gender?: string;
   role: string;
+  notified_ice_id?: string | null;
   profile: UserProfileResponse;
   privacy: PrivacySettingsResponse;
   profile_completeness: number;
@@ -446,6 +481,7 @@ export interface PrivacySettings {
   show_emergency_notes: boolean;
   emergency_notes?: string | null;
   enable_scan_alerts: boolean;
+  enable_ice_scan_alerts: boolean;
   qr_revoked: boolean;
   updated_at?: string;
 }
@@ -459,6 +495,7 @@ export interface PrivacySettingsUpdate {
   show_emergency_notes?: boolean;
   emergency_notes?: string | null;
   enable_scan_alerts?: boolean;
+  enable_ice_scan_alerts?: boolean;
   qr_revoked?: boolean;
 }
 
@@ -472,6 +509,7 @@ export interface PrivacySettingsResponse {
   show_emergency_notes: boolean;
   emergency_notes?: string | null;
   enable_scan_alerts: boolean;
+  enable_ice_scan_alerts: boolean;
   qr_revoked: boolean;
   updated_at?: string;
 }
@@ -501,6 +539,14 @@ export interface EmergencyScanLog {
   ip_address: string;
   user_agent: string;
   city?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  accuracy_meters?: number | null;
+  maps_url?: string | null;
+  location_name?: string | null;
+  device_type?: string | null;
+  is_gps_verified?: boolean;
+  location?: string | null;
 }
 
 // ---------------------------------------------------------------------------

@@ -12,6 +12,10 @@ import type {
   PrivacySettingsUpdate,
 } from "@/types/api";
 
+export interface EmergencySessionDataResponse extends EmergencyProfileResponse {
+  expires_in_seconds: number;
+}
+
 /** Fetch public emergency profile by health ID (no auth required). */
 export async function getPublicEmergencyProfile(
   healthId: string,
@@ -20,6 +24,15 @@ export async function getPublicEmergencyProfile(
   return apiClient.get(`/emergency/${healthId}`, {
     params: { token },
   }) as unknown as EmergencyProfileResponse;
+}
+
+/** Fetch protected emergency profile using HTTP-Only triage session cookie. */
+export async function getEmergencySessionData(
+  healthId: string
+): Promise<EmergencySessionDataResponse> {
+  return apiClient.get(`/emergency/${healthId}/session-data`, {
+    withCredentials: true,
+  }) as unknown as EmergencySessionDataResponse;
 }
 
 /** Fetch QR code metadata (requires auth). */
@@ -86,3 +99,54 @@ export async function deleteEmergencyContact(
 ): Promise<{ status: string; message: string }> {
   return apiClient.delete(`/user/emergency-contacts/${contactId}`) as unknown as { status: string; message: string };
 }
+
+/** Fetch real-time emergency alert streams for designated ICE contact. */
+export async function getSharedAlertStreams(): Promise<import("@/hooks/useSharedEmergencyListeners").SharedAlertStream[]> {
+  return apiClient.get("/emergency/shared-alert-streams") as unknown as import("@/hooks/useSharedEmergencyListeners").SharedAlertStream[];
+}
+
+/** Designate primary ICE contact for real-time scan alerting. */
+export async function updateNotifiedIce(
+  notifiedIceId: string | null
+): Promise<import("@/types/api").UserResponse> {
+  return apiClient.put("/user/notified-ice", {
+    notified_ice_id: notifiedIceId,
+  }) as unknown as import("@/types/api").UserResponse;
+}
+
+/** Fetch detailed scan history timeline for a patient by health ID. */
+export async function getEmergencyScanHistory(
+  healthId: string
+): Promise<import("@/types/api").EmergencyScanLog[]> {
+  return apiClient.get(`/emergency/${healthId}/scan-history`) as unknown as import("@/types/api").EmergencyScanLog[];
+}
+
+/** Fetch patient emergency card summary profile for caregiver/ICE timeline view by health ID. */
+export async function getPatientEmergencySummary(
+  healthId: string
+): Promise<{
+  health_id: string;
+  full_name: string;
+  blood_group?: string;
+  critical_allergies?: string[];
+  active_medications?: string[];
+  chronic_conditions?: string[];
+  emergency_contacts?: import("@/types/api").EmergencyContactResponse[];
+  emergency_notes?: string;
+  is_revoked?: boolean;
+}> {
+  return apiClient.get(`/emergency/patient-summary/${healthId}`) as unknown as Promise<{
+    health_id: string;
+    full_name: string;
+    blood_group?: string;
+    critical_allergies?: string[];
+    active_medications?: string[];
+    chronic_conditions?: string[];
+    emergency_contacts?: import("@/types/api").EmergencyContactResponse[];
+    emergency_notes?: string;
+    is_revoked?: boolean;
+  }>;
+}
+
+
+

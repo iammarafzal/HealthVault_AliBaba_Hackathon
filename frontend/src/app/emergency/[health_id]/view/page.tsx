@@ -2,12 +2,12 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Image from "next/image";
-import { useSearchParams } from "next/navigation";
 import {
   Activity,
   AlertCircle,
   AlertOctagon,
   AlertTriangle,
+  Clock,
   Heart,
   Loader2,
   Phone,
@@ -16,11 +16,14 @@ import {
   ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
-import { getPublicEmergencyProfile } from "@/services/emergencyService";
-import type { EmergencyProfileResponse } from "@/types/api";
+import {
+  getEmergencySessionData,
+  type EmergencySessionDataResponse,
+} from "@/services/emergencyService";
+import { useCaptureScanLocation } from "@/hooks/useCaptureScanLocation";
 import { cn } from "@/lib/utils";
 
-interface EmergencyPageProps {
+interface EmergencyViewPageProps {
   params: { health_id: string };
 }
 
@@ -55,15 +58,27 @@ const DICT = {
     callContact: "Call",
     callNow: "Call Now",
     accessRestricted: "Access Restricted",
+    sessionTimerActive: "Triage Session Active",
+    remaining: "remaining",
+    physicalScanRequiredTitle: "Direct Physical Scan Required",
+    physicalScanRequiredDesc:
+      "This emergency medical profile is protected against unauthorized link sharing. Access can only be unlocked by scanning the QR code directly from the patient's physical card.",
+    sessionExpiredTitle: "Triage Session Expired",
+    sessionExpiredDesc:
+      "The 15-minute emergency access window has expired. Please re-scan the patient's physical card to restore access.",
+    deviceMismatchTitle: "Device Authorization Required",
+    deviceMismatchDesc:
+      "This session is locked to the physical device that performed the scan. Direct physical scan is required to view this medical profile.",
+    sharedLinkNote: "Shared or expired links cannot view this data.",
     revokedTitle: "Emergency Access Disabled by Patient",
-    revokedDesc: "The patient has temporarily turned off public emergency access or regenerated their wallet QR token.",
-    invalidTokenTitle: "Invalid or Expired QR Code",
-    invalidTokenDesc: "This QR code has been replaced with a newly printed card. Please scan the patient's newest card.",
+    revokedDesc:
+      "The patient has temporarily turned off public emergency access or regenerated their wallet QR token.",
     notFoundTitle: "Profile Unavailable",
     notFoundDesc: "No emergency record was found for this ID.",
-    loadingTitle: "Loading Emergency Profile…",
-    footerText: "HealthVault AI • Verified Emergency Triage System • Pakistan National Triage Network",
-    securityTokenEnforced: "Health ID: {id} • Security Token Enforced",
+    loadingTitle: "Validating Secure Emergency Triage Session…",
+    footerText:
+      "HealthVault AI • Verified Emergency Triage System • Pakistan National Triage Network",
+    securityTokenEnforced: "Health ID: {id} • Device-Locked Ephemeral Session",
   },
   ur: {
     topBanner: "سرکاری ہنگامی طبی خلاصہ • فوری رسائی",
@@ -91,15 +106,27 @@ const DICT = {
     callContact: "کال کریں",
     callNow: "ابھی کال کریں",
     accessRestricted: "رسائی بند ہے",
+    sessionTimerActive: "ہنگامی رسائی کا وقت",
+    remaining: "باقی",
+    physicalScanRequiredTitle: "براہ کرم اصل کارڈ اسکین کریں",
+    physicalScanRequiredDesc:
+      "یہ ہنگامی طبی پروفائل لنکس شیئر کرنے سے محفوظ ہے۔ معلومات صرف مریض کے اصل کارڈ سے کیو آر کوڈ اسکین کر کے ہی کھولی جا سکتی ہے۔",
+    sessionExpiredTitle: "ایمرجنسی رسائی کا وقت ختم ہو گیا ہے",
+    sessionExpiredDesc:
+      "15 منٹ کا ہنگامی وقت ختم ہو چکا ہے۔ رسائی بحال کرنے کے لیے مریض کا اصل کارڈ دوبارہ اسکین کریں۔",
+    deviceMismatchTitle: "غیر متعلقہ ڈیوائس سے رسائی بلاک ہے",
+    deviceMismatchDesc:
+      "یہ سیشن صرف اسی ڈیوائس کے لیے مخصوص ہے جس سے اسکین کیا گیا تھا۔ معلومات دیکھنے کے لیے براہ راست کارڈ اسکین کریں۔",
+    sharedLinkNote: "شیئر کیے گئے یا پرانے لنکس سے یہ معلومات نہیں دیکھی جا سکتیں۔",
     revokedTitle: "مریض کی جانب سے ایمرجنسی رسائی بند ہے",
-    revokedDesc: "مریض نے عارضی طور پر ایمرجنسی رسائی معطل کر دی ہے یا نیا کارڈ جاری کیا ہے۔",
-    invalidTokenTitle: "غیر موزوں یا پرانا کیو آر کوڈ",
-    invalidTokenDesc: "یہ کیو آر کوڈ پرانا ہو چکا ہے۔ برائے مہربانی مریض کا نیا کارڈ اسکین کریں۔",
+    revokedDesc:
+      "مریض نے عارضی طور پر ایمرجنسی رسائی معطل کر دی ہے یا نیا کارڈ جاری کیا ہے۔",
     notFoundTitle: "پروفائل دستیاب نہیں",
     notFoundDesc: "اس شناختی نمبر کے لیے کوئی ہنگامی ریکارڈ نہیں ملا۔",
-    loadingTitle: "ایمرجنسی پروفائل لوڈ ہو رہی ہے...",
-    footerText: "ہیلتھ والٹ اے آئی • تصدیق شدہ ایمرجنسی ٹرائیج سسٹم • قومی ہنگامی نیٹ ورک",
-    securityTokenEnforced: "شناختی نمبر: {id} • سیکیورٹی پروٹیکشن فعال",
+    loadingTitle: "سیکیورٹی سیشن کی تصدیق کی جا رہی ہے...",
+    footerText:
+      "ہیلتھ والٹ اے آئی • تصدیق شدہ ایمرجنسی ٹرائیج سسٹم • قومی ہنگامی نیٹ ورک",
+    securityTokenEnforced: "شناختی نمبر: {id} • محفوظ ڈیوائس لاکڈ سیشن",
   },
 };
 
@@ -130,11 +157,17 @@ function formatRelation(raw: string | undefined, lang: Language): string {
   return raw;
 }
 
-export default function EmergencyPublicTriagePage({ params }: EmergencyPageProps) {
-  const searchParams = useSearchParams();
-  const token = searchParams?.get("token") || "";
+function formatCountdown(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
 
-  // 1. Independent Language State (Urdu by default if param/locale or browser preference, else English)
+export default function EmergencySecureViewPage({ params }: EmergencyViewPageProps) {
+  // Automatically request high-accuracy GPS coordinates on scanner device mount
+  useCaptureScanLocation(params.health_id);
+
+  // 1. Language State
   const [lang, setLang] = useState<Language>(() => {
     if (typeof window !== "undefined") {
       const urlLang = new URLSearchParams(window.location.search).get("lang");
@@ -160,20 +193,75 @@ export default function EmergencyPublicTriagePage({ params }: EmergencyPageProps
   const isUrdu = lang === "ur";
   const t = DICT[lang];
 
-  const [profile, setProfile] = useState<EmergencyProfileResponse | null>(null);
+  const [profile, setProfile] = useState<EmergencySessionDataResponse | null>(null);
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
 
+  // 2. Fetch Session Data
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
-      if (token) {
-        window.location.href = `${apiBase}/emergency/gateway/${params.health_id}?token=${encodeURIComponent(token)}`;
-      } else {
-        window.location.href = `/emergency/${params.health_id}/view`;
+    let isMounted = true;
+
+    const fetchSession = async () => {
+      setIsLoading(true);
+      setErrorStatus(null);
+      try {
+        const data = await getEmergencySessionData(params.health_id);
+        if (!isMounted) return;
+
+        if (data.is_revoked) {
+          setErrorStatus("revoked");
+        } else {
+          setProfile(data);
+          setRemainingSeconds(data.expires_in_seconds);
+        }
+      } catch (err: unknown) {
+        if (!isMounted) return;
+        const msg = err instanceof Error ? err.message : "";
+        const lowerMsg = msg.toLowerCase();
+
+        if (msg.includes("401") || lowerMsg.includes("physical_scan_required")) {
+          setErrorStatus("PHYSICAL_SCAN_REQUIRED");
+        } else if (msg.includes("403") && lowerMsg.includes("session_expired")) {
+          setErrorStatus("SESSION_EXPIRED");
+        } else if (msg.includes("403") && lowerMsg.includes("device_mismatch")) {
+          setErrorStatus("DEVICE_MISMATCH");
+        } else if (lowerMsg.includes("disabled") || lowerMsg.includes("revoked")) {
+          setErrorStatus("revoked");
+        } else if (msg.includes("404")) {
+          setErrorStatus("not_found");
+        } else {
+          setErrorStatus("PHYSICAL_SCAN_REQUIRED");
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
-    }
-  }, [params.health_id, token]);
+    };
+
+    fetchSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [params.health_id]);
+
+  // 3. Interval Timer for 15-Minute Expiration
+  useEffect(() => {
+    if (remainingSeconds === null || remainingSeconds <= 0 || errorStatus) return;
+
+    const interval = setInterval(() => {
+      setRemainingSeconds((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          setErrorStatus("SESSION_EXPIRED");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [remainingSeconds, errorStatus]);
 
   /* ── 1. Fast Loading State ── */
   if (isLoading) {
@@ -208,10 +296,29 @@ export default function EmergencyPublicTriagePage({ params }: EmergencyPageProps
     );
   }
 
-  /* ── 2. Disabled / Revoked / Invalid Error State ── */
+  /* ── 2. Error & Access Restricted Security Screen ── */
   if (errorStatus || (profile && profile.is_revoked)) {
+    const isScanRequired = errorStatus === "PHYSICAL_SCAN_REQUIRED";
+    const isExpired = errorStatus === "SESSION_EXPIRED";
+    const isDeviceMismatch = errorStatus === "DEVICE_MISMATCH";
     const isRevoked = errorStatus === "revoked";
-    const isTokenErr = errorStatus === "invalid_token";
+
+    let errTitle = t.physicalScanRequiredTitle;
+    let errDesc = t.physicalScanRequiredDesc;
+
+    if (isExpired) {
+      errTitle = t.sessionExpiredTitle;
+      errDesc = t.sessionExpiredDesc;
+    } else if (isDeviceMismatch) {
+      errTitle = t.deviceMismatchTitle;
+      errDesc = t.deviceMismatchDesc;
+    } else if (isRevoked) {
+      errTitle = t.revokedTitle;
+      errDesc = t.revokedDesc;
+    } else if (errorStatus === "not_found") {
+      errTitle = t.notFoundTitle;
+      errDesc = t.notFoundDesc;
+    }
 
     return (
       <div
@@ -259,33 +366,28 @@ export default function EmergencyPublicTriagePage({ params }: EmergencyPageProps
                 اردو
               </button>
             </div>
-            <span className="text-[10.5px] font-bold text-red-400 bg-red-500/10 border border-red-500/30 px-2.5 py-1 rounded-full uppercase shrink-0">
+            <span className="text-[10.5px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/30 px-2.5 py-1 rounded-full uppercase shrink-0">
               {t.accessRestricted}
             </span>
           </div>
         </header>
 
-        {/* Center Card */}
+        {/* Security Barrier Card */}
         <main className="w-full max-w-xl my-auto py-8">
-          <div className="rounded-3xl border border-red-500/30 bg-[#131C2A] p-6 sm:p-8 text-center space-y-6 shadow-2xl">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/15 text-red-400 shadow-md">
-              <ShieldAlert className="h-7 w-7" />
+          <div className="rounded-3xl border border-rose-500/30 bg-[#131C2A] p-6 sm:p-8 text-center space-y-6 shadow-2xl">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/15 text-rose-500 shadow-md">
+              <ShieldAlert className="h-9 w-9" />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               <h1 className="text-lg sm:text-xl font-black uppercase tracking-wide text-white">
-                {isRevoked
-                  ? t.revokedTitle
-                  : isTokenErr
-                  ? t.invalidTokenTitle
-                  : t.notFoundTitle}
+                {errTitle}
               </h1>
               <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto leading-relaxed">
-                {isRevoked
-                  ? t.revokedDesc
-                  : isTokenErr
-                  ? t.invalidTokenDesc
-                  : t.notFoundDesc}
+                {errDesc}
+              </p>
+              <p className="text-[11.5px] font-semibold text-amber-400/90 bg-amber-500/10 border border-amber-500/20 py-1.5 px-3 rounded-xl max-w-xs mx-auto">
+                {t.sharedLinkNote}
               </p>
             </div>
 
@@ -326,7 +428,6 @@ export default function EmergencyPublicTriagePage({ params }: EmergencyPageProps
 
   if (!profile) return null;
 
-  // Zero Data Leakage Enforcement: Respect privacy visibility controls from backend
   const primaryContact = profile.emergency_contacts?.[0];
   const hasAllergies = profile.critical_allergies && profile.critical_allergies.length > 0;
   const hasMeds = profile.active_medications && profile.active_medications.length > 0;
@@ -343,7 +444,7 @@ export default function EmergencyPublicTriagePage({ params }: EmergencyPageProps
       dir={isUrdu ? "rtl" : "ltr"}
     >
       <div className="w-full max-w-4xl space-y-4 sm:space-y-5 pb-12">
-        {/* ═══ 1. Top Navbar with Clearly Visible Branding & Language Switcher ═══ */}
+        {/* ═══ 1. Top Navbar with Branding, Timer Badge & Language Switcher ═══ */}
         <header className="flex items-center justify-between pb-3 sm:pb-4 border-b border-slate-800/80 gap-2">
           <div className="flex items-center gap-3">
             <Image
@@ -357,6 +458,16 @@ export default function EmergencyPublicTriagePage({ params }: EmergencyPageProps
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Sticky Ephemeral Session Countdown Timer Badge */}
+            {remainingSeconds !== null && (
+              <div className="flex items-center gap-1.5 text-xs text-amber-400 font-bold bg-amber-500/10 border border-amber-500/25 px-3 py-1.5 rounded-full shadow-xs shrink-0 font-mono">
+                <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0 animate-pulse" />
+                <span className="hidden sm:inline">{t.sessionTimerActive} ·</span>
+                <span>{formatCountdown(remainingSeconds)}</span>
+                <span className="hidden md:inline text-[10px] text-amber-300/80">({t.remaining})</span>
+              </div>
+            )}
+
             {/* Language Switcher Toggle */}
             <div className="flex items-center rounded-xl border border-slate-700 bg-[#131C2A] p-0.5 shadow-sm">
               <button

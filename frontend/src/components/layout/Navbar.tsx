@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/context/LanguageContext";
 import UserNav from "@/components/layout/UserNav";
+import EmergencyMonitorStatus from "@/components/emergency/EmergencyMonitorStatus";
+import NotificationBell from "@/components/layout/NotificationBell";
 
 interface NavbarProps {
   onMenuClick?: () => void;
@@ -61,6 +63,9 @@ export default function Navbar({ onMenuClick, showMobileMenu }: NavbarProps) {
 
       {/* ── Right Actions Cluster: Language Switcher, Theme Toggle, User Profile ── */}
       <div className="flex items-center gap-2 sm:gap-3">
+        {/* ICE Real-time Scan Monitor Indicator */}
+        <EmergencyMonitorStatus />
+
         {/* Language Toggle Pill — LTR forced container so EN / اردو pill maintains clean sequence */}
         <div
           className="flex items-center rounded-xl border border-[#DCE8E5] dark:border-white/10 bg-[#F5F8F7] dark:bg-[#223431] p-1 shadow-2xs"
@@ -94,6 +99,9 @@ export default function Navbar({ onMenuClick, showMobileMenu }: NavbarProps) {
             اردو
           </button>
         </div>
+
+        {/* Notifications Center Bell Popover */}
+        <NotificationBell />
 
         {/* Theme Toggle */}
         <Button

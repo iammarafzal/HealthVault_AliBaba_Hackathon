@@ -64,3 +64,36 @@ export async function unsubscribePush(endpoint?: string): Promise<{ status: stri
   const response = await apiClient.delete(url);
   return response as unknown as { status: string; deleted_count: number };
 }
+
+/** Fetch user's in-app notifications with unread count. */
+export async function getInAppNotifications(
+  limit: number = 30
+): Promise<import("@/types/api").NotificationListResponse> {
+  const response = await apiClient.get("/notifications", {
+    params: { limit },
+  });
+  return response as unknown as import("@/types/api").NotificationListResponse;
+}
+
+/** Mark a single in-app notification as read. */
+export async function markNotificationRead(
+  id: string
+): Promise<import("@/types/api").InAppNotification> {
+  const response = await apiClient.patch(`/notifications/${id}/read`);
+  return response as unknown as import("@/types/api").InAppNotification;
+}
+
+/** Mark all in-app notifications as read for current user. */
+export async function markAllNotificationsRead(): Promise<{ status: string; updated_count: number }> {
+  const response = await apiClient.post("/notifications/mark-all-read");
+  return response as unknown as { status: string; updated_count: number };
+}
+
+/** Delete an in-app notification. */
+export async function deleteNotification(
+  id: string
+): Promise<{ status: string; message: string }> {
+  const response = await apiClient.delete(`/notifications/${id}`);
+  return response as unknown as { status: string; message: string };
+}
+

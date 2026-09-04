@@ -1,307 +1,365 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
+  AlertTriangle,
   Bell,
+  BellOff,
   Check,
   CheckCheck,
-  Clock,
+  ExternalLink,
   Filter,
+  Loader2,
+  Pill,
   ShieldAlert,
   Trash2,
-  User,
 } from "lucide-react";
-import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { useLanguage } from "@/context/LanguageContext";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  deleteNotification,
+  getInAppNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from "@/services/notificationService";
+import type { InAppNotification } from "@/types/api";
 import { cn } from "@/lib/utils";
 
-interface Notification {
-  id: number;
-  title: string;
-  description: string;
-  time: string;
-  icon: React.ElementType;
-  urgent: boolean;
-  read: boolean;
-}
+function formatRelativeTime(dateString: string, isUrdu: boolean): string {
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
 
-const initialNotifications: Notification[] = [
-  {
-    id: 1,
-    title: "Missed Metformin 500mg dose",
-    description:
-      "You missed your scheduled morning dose of Metformin 500mg. Take it as soon as possible or consult your doctor.",
-    time: "2 hours ago",
-    icon: Clock,
-    urgent: true,
-    read: false,
-  },
-  {
-    id: 2,
-    title: "Drug interaction flagged in recent upload",
-    description:
-      "A potential drug-drug interaction was detected between Warfarin and Aspirin in your recently uploaded prescription. Please review.",
-    time: "5 hours ago",
-    icon: ShieldAlert,
-    urgent: true,
-    read: false,
-  },
-  {
-    id: 3,
-    title: "Emergency QR accessed",
-    description:
-      "Your emergency QR code was scanned from an unknown device. If this wasn't you, consider revoking access from Privacy Settings.",
-    time: "1 day ago",
-    icon: User,
-    urgent: false,
-    read: false,
-  },
-  {
-    id: 4,
-    title: "Lab report processed successfully",
-    description:
-      "Your CBC lab report has been extracted and stored in the Medical Vault. Biomarker values are now available for review.",
-    time: "2 days ago",
-    icon: Bell,
-    urgent: false,
-    read: true,
-  },
-  {
-    id: 5,
-    title: "Daily medication reminder",
-    description:
-      "Reminder: Take Atorvastatin 10mg before bed tonight. Consistent timing helps maximize effectiveness.",
-    time: "2 days ago",
-    icon: Clock,
-    urgent: false,
-    read: true,
-  },
-  {
-    id: 6,
-    title: "Doctor summary generated",
-    description:
-      "Your 1-page clinical summary has been updated with the latest records. You can view and print it from the Clinical Summary page.",
-    time: "3 days ago",
-    icon: Check,
-    urgent: false,
-    read: true,
-  },
-];
+    if (diffMins < 1) return isUrdu ? "ابھی" : "Just now";
+    if (diffMins < 60) return isUrdu ? `${diffMins}m ago` : `${diffMins}m ago`;
+    if (diffHours < 24) return isUrdu ? `${diffHours}h ago` : `${diffHours}h ago`;
+    if (diffDays < 7) return isUrdu ? `${diffDays}d ago` : `${diffDays}d ago`;
+    return date.toLocaleDateString(isUrdu ? "ur-PK" : "en-US", { month: "short", day: "numeric" });
+  } catch {
+    return dateString;
+  }
+}
 
 type FilterType = "all" | "unread" | "urgent";
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] =
-    useState<Notification[]>(initialNotifications);
+  const { isUrdu, dir } = useLanguage();
+  const [notifications, setNotifications] = useState<InAppNotification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>("all");
 
-  /* ── Derived lists ──────────────────────────────────────── */
+  const loadNotifications = async () => {
+    setIsLoading(true);
+    try {
+      const res = await getInAppNotifications(50);
+      if (res && Array.isArray(res.items)) {
+        setNotifications(res.items);
+      }
+    } catch {
+      // Ignore background errors
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadNotifications();
+  }, []);
+
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const urgentCount = notifications.filter(
+    (n) => n.type === "EMERGENCY_SCAN" || n.type === "INTERACTION_ALERT"
+  ).length;
+
   const filtered = notifications.filter((n) => {
-    if (filter === "unread") return !n.read;
-    if (filter === "urgent") return n.urgent;
+    if (filter === "unread") return !n.is_read;
+    if (filter === "urgent") return n.type === "EMERGENCY_SCAN" || n.type === "INTERACTION_ALERT";
     return true;
   });
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
-  const urgentCount = notifications.filter((n) => n.urgent).length;
-
-  /* ── Handlers ───────────────────────────────────────────── */
-  const markAsRead = (id: number) => {
+  const handleMarkAsRead = async (id: string) => {
     setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
     );
+    try {
+      await markNotificationRead(id);
+    } catch {
+      // Safe ignore
+    }
   };
 
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const handleMarkAllRead = async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    try {
+      await markAllNotificationsRead();
+    } catch {
+      // Safe ignore
+    }
   };
 
-  const deleteNotification = (id: number) => {
+  const handleDelete = async (id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+    try {
+      await deleteNotification(id);
+    } catch {
+      // Safe ignore
+    }
   };
 
-  const clearAllRead = () => {
-    setNotifications((prev) => prev.filter((n) => !n.read));
+  const getCategoryMeta = (type: string, isRead: boolean) => {
+    switch (type) {
+      case "EMERGENCY_SCAN":
+        return {
+          icon: ShieldAlert,
+          iconBg: "bg-rose-500/10 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-500/20",
+          cardBg: !isRead
+            ? "bg-rose-500/[0.03] dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/40"
+            : "bg-card border-border/80",
+          badge: isUrdu ? "ہنگامی اسکین الرٹ" : "Emergency Scan Alert",
+          badgeVariant: "destructive" as const,
+        };
+      case "DOSE_REMINDER":
+        return {
+          icon: Pill,
+          iconBg: "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-500/20",
+          cardBg: !isRead
+            ? "bg-emerald-500/[0.03] dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40"
+            : "bg-card border-border/80",
+          badge: isUrdu ? "ادویات کی یاد دہانی" : "Medicine Reminder",
+          badgeVariant: "default" as const,
+        };
+      case "INTERACTION_ALERT":
+        return {
+          icon: AlertTriangle,
+          iconBg: "bg-amber-500/10 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-500/20",
+          cardBg: !isRead
+            ? "bg-amber-500/[0.03] dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40"
+            : "bg-card border-border/80",
+          badge: isUrdu ? "دوائیوں کا باہمی اثر" : "Interaction Warning",
+          badgeVariant: "secondary" as const,
+        };
+      default:
+        return {
+          icon: Bell,
+          iconBg: "bg-teal-500/10 text-teal-600 dark:bg-teal-950/60 dark:text-teal-400 border border-teal-500/20",
+          cardBg: !isRead
+            ? "bg-teal-500/[0.03] dark:bg-teal-950/20 border-teal-200 dark:border-teal-900/40"
+            : "bg-card border-border/80",
+          badge: isUrdu ? "سسٹم الرٹ" : "System Alert",
+          badgeVariant: "outline" as const,
+        };
+    }
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6 pb-12" dir={dir}>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl flex items-center gap-3">
+            <div className="p-2 rounded-2xl bg-vault-teal/10 text-vault-teal dark:bg-teal-500/20 dark:text-teal-300">
+              <Bell className="h-7 w-7" />
+            </div>
+            {isUrdu ? "اطلاعات و الرٹس" : "Notifications & Alerts"}
+          </h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
             {unreadCount > 0
-              ? `You have ${unreadCount} unread notification${unreadCount > 1 ? "s" : ""}.`
-              : "You're all caught up."}
+              ? isUrdu
+                ? `آپ کے پاس ${unreadCount} غیر پڑھا الرٹ${unreadCount > 1 ? "s" : ""} موجود ہیں۔`
+                : `You have ${unreadCount} unread notification${unreadCount > 1 ? "s" : ""}.`
+              : isUrdu
+                ? "تمام اطلاعات پڑھ لی گئی ہیں۔"
+                : "You're all caught up with your notifications."}
           </p>
         </div>
-        <div className="flex gap-2">
-          {unreadCount > 0 && (
-            <Button variant="outline" size="sm" onClick={markAllRead}>
-              <CheckCheck className="mr-1.5 h-4 w-4" />
-              Mark all read
-            </Button>
-          )}
-          {notifications.some((n) => n.read) && (
-            <Button variant="outline" size="sm" onClick={clearAllRead}>
-              <Trash2 className="mr-1.5 h-4 w-4" />
-              Clear read
-            </Button>
-          )}
-        </div>
+
+        {unreadCount > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleMarkAllRead}
+            className="text-xs font-bold gap-2 rounded-2xl border-vault-teal/30 text-vault-teal hover:bg-vault-teal/10 dark:text-teal-300 shrink-0 cursor-pointer shadow-2xs"
+          >
+            <CheckCheck className="h-4 w-4" />
+            <span>{isUrdu ? "سب پڑھیں" : "Mark all as read"}</span>
+          </Button>
+        )}
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex gap-1 rounded-lg border p-1">
+      {/* Filter Tabs */}
+      <div className="flex gap-2 rounded-2xl border border-border/80 bg-muted/40 p-1.5 shadow-2xs">
         {(
           [
-            { key: "all" as const, label: "All", count: notifications.length },
-            { key: "unread" as const, label: "Unread", count: unreadCount },
-            { key: "urgent" as const, label: "Urgent", count: urgentCount },
+            { key: "all" as const, label: isUrdu ? "تمام" : "All", count: notifications.length, icon: Filter },
+            { key: "unread" as const, label: isUrdu ? "غیر پڑھا" : "Unread", count: unreadCount, icon: Bell },
+            { key: "urgent" as const, label: isUrdu ? "فوری" : "Urgent", count: urgentCount, icon: ShieldAlert },
           ] as const
-        ).map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setFilter(tab.key)}
-            className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
-              filter === tab.key
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            )}
-          >
-            {tab.key === "all" && <Filter className="h-3.5 w-3.5" />}
-            {tab.key === "unread" && <Bell className="h-3.5 w-3.5" />}
-            {tab.key === "urgent" && <ShieldAlert className="h-3.5 w-3.5" />}
-            {tab.label}
-            <Badge
-              variant="secondary"
-              className="ml-1 h-5 min-w-[20px] px-1 text-[11px]"
+        ).map((tab) => {
+          const TabIcon = tab.icon;
+          const isActive = filter === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setFilter(tab.key)}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all cursor-pointer",
+                isActive
+                  ? "bg-slate-900 text-white dark:bg-vault-teal dark:text-white shadow-xs"
+                  : "text-muted-foreground hover:bg-background hover:text-foreground"
+              )}
             >
-              {tab.count}
-            </Badge>
-          </button>
-        ))}
+              <TabIcon className="h-3.5 w-3.5" />
+              <span>{tab.label}</span>
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.2 text-[10px] font-extrabold",
+                  isActive
+                    ? "bg-white/20 text-white"
+                    : "bg-muted text-muted-foreground"
+                )}
+              >
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Notification list */}
-      {filtered.length === 0 ? (
-        <Card>
+      {/* Notification List */}
+      {isLoading ? (
+        <Card className="border-border bg-card rounded-3xl">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center gap-2">
+            <Loader2 className="h-6 w-6 animate-spin text-vault-teal" />
+            <p className="text-xs text-muted-foreground">
+              {isUrdu ? "اطلاعات لوڈ ہو رہی ہیں…" : "Loading notifications…"}
+            </p>
+          </CardContent>
+        </Card>
+      ) : filtered.length === 0 ? (
+        <Card className="border-border bg-card rounded-3xl shadow-2xs">
           <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
-              <Bell className="h-7 w-7 text-muted-foreground" />
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-500/20">
+              <BellOff className="h-7 w-7" />
             </div>
             <div>
-              <p className="text-sm font-medium">No notifications</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm font-extrabold text-foreground">
+                {isUrdu ? "کوئی نئی اطلاع نہیں ہے" : "All Clear!"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-sm leading-relaxed">
                 {filter === "unread"
-                  ? "All notifications have been read."
+                  ? isUrdu
+                    ? "آپ نے تمام اطلاعات دیکھ لی ہیں۔"
+                    : "All notifications have been marked as read."
                   : filter === "urgent"
-                    ? "No urgent notifications right now."
-                    : "Nothing to show yet."}
+                  ? isUrdu
+                    ? "اس وقت کوئی ہنگامی الرٹ نہیں ہے۔"
+                    : "No urgent alerts requiring immediate action."
+                  : isUrdu
+                  ? "آپ کی ادویات کی یاد دہانیاں اور الرٹس اپ ڈیٹ ہیں۔"
+                  : "No notifications registered yet."}
               </p>
             </div>
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-2">
-          {filtered.map((n) => {
-            const Icon = n.icon;
+        <div className="space-y-3">
+          {filtered.map((notif) => {
+            const title = isUrdu ? notif.title_ur || notif.title_en : notif.title_en;
+            const message = isUrdu ? notif.message_ur || notif.message_en : notif.message_en;
+            const relTime = formatRelativeTime(notif.created_at, isUrdu);
+            const meta = getCategoryMeta(notif.type, notif.is_read);
+            const Icon = meta.icon;
+
             return (
               <Card
-                key={n.id}
+                key={notif.id}
                 className={cn(
-                  "transition-colors",
-                  !n.read && "border-l-4 border-l-primary",
-                  n.urgent && !n.read && "border-l-destructive"
+                  "transition-all duration-200 shadow-2xs hover:shadow-md rounded-3xl overflow-hidden group",
+                  meta.cardBg
                 )}
               >
-                <CardContent className="flex items-start gap-4 py-4">
-                  {/* Icon */}
-                  <div
-                    className={cn(
-                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-                      n.urgent
-                        ? "bg-destructive/10"
-                        : n.read
-                          ? "bg-muted"
-                          : "bg-primary/10"
-                    )}
-                  >
-                    <Icon
-                      className={cn(
-                        "h-5 w-5",
-                        n.urgent
-                          ? "text-destructive"
-                          : n.read
-                            ? "text-muted-foreground"
-                            : "text-primary"
-                      )}
-                    />
+                <CardContent className="flex items-start gap-4 p-4.5">
+                  {/* Category Icon Box */}
+                  <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl shadow-xs", meta.iconBg)}>
+                    <Icon className="h-5 w-5" />
                   </div>
 
-                  {/* Content */}
-                  <div className="flex flex-1 flex-col gap-1">
+                  {/* Content & Actions */}
+                  <div className="flex flex-1 flex-col gap-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p
-                          className={cn(
-                            "text-sm",
-                            n.read ? "font-medium" : "font-bold"
-                          )}
-                        >
-                          {n.title}
-                          {!n.read && (
-                            <span className="ml-2 inline-block h-2 w-2 rounded-full bg-primary" />
-                          )}
-                        </p>
-                        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                          {n.description}
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant={meta.badgeVariant} className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-lg">
+                            {meta.badge}
+                          </Badge>
+                          <h3 className={cn("text-xs sm:text-sm text-foreground", !notif.is_read ? "font-black" : "font-semibold")}>
+                            {title}
+                          </h3>
+                        </div>
+                        <p className="text-xs leading-relaxed text-slate-600 dark:text-muted-foreground mt-1">
+                          {message}
                         </p>
                       </div>
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        {n.time}
+
+                      <span className="shrink-0 text-[11px] font-mono text-muted-foreground">
+                        {relTime}
                       </span>
                     </div>
 
-                    {/* Actions */}
-                    <div className="mt-1 flex gap-2">
-                      {n.urgent && (
-                        <Badge
-                          variant="destructive"
-                          className="text-[10px]"
+                    {/* Footer bar inside card */}
+                    <div className="mt-3 pt-2.5 border-t border-border/50 flex items-center justify-between gap-2">
+                      {notif.action_url ? (
+                        <a
+                          href={
+                            notif.type === "EMERGENCY_SCAN" && (notif.action_url === "/emergency" || notif.action_url === "/")
+                              ? "/emergency/activity"
+                              : notif.action_url
+                          }
+                          className="inline-flex items-center gap-1.5 text-xs font-extrabold text-vault-teal hover:underline dark:text-teal-400 group-hover:translate-x-0.5 transition-transform"
                         >
-                          Urgent
-                        </Badge>
+                          <span>
+                            {notif.type === "EMERGENCY_SCAN"
+                              ? isUrdu
+                                ? "ٹائم لائن دیکھیں"
+                                : "View Scan Timeline"
+                              : isUrdu
+                              ? "تفصیلات دیکھیں"
+                              : "View Details"}
+                          </span>
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      ) : (
+                        <span />
                       )}
-                      {!n.read && (
+
+                      <div className="flex items-center gap-2">
+                        {!notif.is_read && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/50 rounded-xl"
+                            onClick={() => handleMarkAsRead(notif.id)}
+                          >
+                            <Check className="mr-1.5 h-3.5 w-3.5" />
+                            {isUrdu ? "پڑھ لیا گیا" : "Mark as read"}
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => markAsRead(n.id)}
+                          className="h-8 text-xs font-bold text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl"
+                          onClick={() => handleDelete(notif.id)}
                         >
-                          <Check className="mr-1 h-3 w-3" />
-                          Mark read
+                          <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                          {isUrdu ? "حذف کریں" : "Dismiss"}
                         </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs text-muted-foreground"
-                        onClick={() => deleteNotification(n.id)}
-                      >
-                        <Trash2 className="mr-1 h-3 w-3" />
-                        Dismiss
-                      </Button>
+                      </div>
                     </div>
                   </div>
                 </CardContent>

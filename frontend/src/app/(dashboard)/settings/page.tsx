@@ -34,6 +34,7 @@ import { useLanguage } from "@/context/LanguageContext";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import NotificationSettingsCard from "@/components/settings/NotificationSettingsCard";
+import EmergencyScanAlertRoutingCard from "@/components/settings/EmergencyScanAlertRoutingCard";
 
 type SettingsTab = "profile" | "credentials" | "notifications" | "danger";
 
@@ -596,6 +597,9 @@ export default function SettingsPage() {
                   <NotificationSettingsCard />
                 </CardContent>
               </Card>
+
+              {/* Emergency Scan Alerting & ICE Routing */}
+              <EmergencyScanAlertRoutingCard />
             </div>
           )}
 

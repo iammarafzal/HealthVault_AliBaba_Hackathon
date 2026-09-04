@@ -1,108 +1,205 @@
+/**
+ * HealthVault AI — Dosage Schedule Parser
+ *
+ * Normalises raw prescription data into a unified DosageTimingSchedule.
+ * Priority:
+ *   1. Explicit `dosage_schedule` JSONB object from the backend.
+ *   2. Fallback parsing of `timing` / `frequency` sig strings
+ *      (Pakistani prescription conventions: "1-0-1", "TDS", "شام کو", etc.)
+ */
+
 import type { DosageSchedulePayload } from "@/types/api";
 
-/** Valid time-slot keys used throughout the planner. */
+/* ── Slot type ──────────────────────────────────────────────────── */
+
 export type SlotKey = "morning" | "noon" | "night";
 
-/** Bilingual display labels for each time slot. */
-export const SLOT_TIMES: Record<
-  SlotKey,
-  { en: string; ur: string }
-> = {
-  morning: { en: "8:00 AM", ur: "صبح 8:00" },
-  noon: { en: "1:00 PM", ur: "دوپہر 1:00" },
-  night: { en: "9:00 PM", ur: "رات 9:00" },
-};
-
-/**
- * Parsed schedule result — which slots are active and the raw frequency string.
- */
 export interface ParsedSchedule {
   morning: boolean;
-  noon: boolean;
-  night: boolean;
-  frequency: string;
+  afternoon: boolean;
+  evening: boolean;
+  frequency_per_day: number;
+  meal_relation: string;
 }
 
+/* ── Default target times per slot ──────────────────────────────── */
+
+export const SLOT_TIMES: Record<SlotKey, { en: string; ur: string }> = {
+  morning: { en: "08:00 AM", ur: "صبح ۰۸:۰۰" },
+  noon: { en: "01:30 PM", ur: "دوپہر ۰۱:۳۰" },
+  night: { en: "08:30 PM", ur: "رات ۰۸:۳۰" },
+};
+
+/* ── Sig-string → schedule map ──────────────────────────────────── */
+
+const SIG_PATTERNS: Array<{
+  pattern: RegExp;
+  schedule: { morning: boolean; afternoon: boolean; evening: boolean };
+}> = [
+  // Numeric sig: "1-0-1", "1-1-1", "0-0-1", "1-0-0", "0-1-0", "1+1+1", "1+0+1"
+  {
+    pattern: /^[12]\s*[-+]\s*0\s*[-+]\s*0/,
+    schedule: { morning: true, afternoon: false, evening: false },
+  },
+  {
+    pattern: /^[12]\s*[-+]\s*0\s*[-+]\s*1/,
+    schedule: { morning: true, afternoon: false, evening: true },
+  },
+  {
+    pattern: /^[12]\s*[-+]\s*1\s*[-+]\s*0/,
+    schedule: { morning: true, afternoon: true, evening: false },
+  },
+  {
+    pattern: /^[12]\s*[-+]\s*1\s*[-+]\s*1/,
+    schedule: { morning: true, afternoon: true, evening: true },
+  },
+  {
+    pattern: /^0\s*[-+]\s*0\s*[-+]\s*1/,
+    schedule: { morning: false, afternoon: false, evening: true },
+  },
+  {
+    pattern: /^0\s*[-+]\s*1\s*[-+]\s*0/,
+    schedule: { morning: false, afternoon: true, evening: false },
+  },
+  {
+    pattern: /^0\s*[-+]\s*1\s*[-+]\s*1/,
+    schedule: { morning: false, afternoon: true, evening: true },
+  },
+  // Two-part sig: "1+1", "1+0", "0+1"
+  {
+    pattern: /^1\s*[-+]\s*1\s*$/,
+    schedule: { morning: true, afternoon: false, evening: true },
+  },
+  {
+    pattern: /^1\s*[-+]\s*0\s*$/,
+    schedule: { morning: true, afternoon: false, evening: false },
+  },
+  {
+    pattern: /^0\s*[-+]\s*1\s*$/,
+    schedule: { morning: false, afternoon: false, evening: true },
+  },
+];
+
+/* ── Keyword → schedule map ─────────────────────────────────────── */
+
+interface KeywordEntry {
+  keywords: string[];
+  schedule: { morning: boolean; afternoon: boolean; evening: boolean };
+}
+
+const KEYWORD_MAP: KeywordEntry[] = [
+  // English
+  { keywords: ["tds", "tid", "thrice"], schedule: { morning: true, afternoon: true, evening: true } },
+  { keywords: ["bd", "bid", "twice"], schedule: { morning: true, afternoon: false, evening: true } },
+  { keywords: ["od morning", "morning"], schedule: { morning: true, afternoon: false, evening: false } },
+  { keywords: ["od noon", "noon", "afternoon", "lunch"], schedule: { morning: false, afternoon: true, evening: false } },
+  { keywords: ["od night", "night", "evening", "bedtime", "bed"], schedule: { morning: false, afternoon: false, evening: true } },
+  // Urdu
+  { keywords: ["تین بار", "تن بار", "tds"], schedule: { morning: true, afternoon: true, evening: true } },
+  { keywords: ["دو بار", "صبح و شام"], schedule: { morning: true, afternoon: false, evening: true } },
+  { keywords: ["صبح کو", "صبح"], schedule: { morning: true, afternoon: false, evening: false } },
+  { keywords: ["دوپہر کو", "دوپہر"], schedule: { morning: false, afternoon: true, evening: false } },
+  { keywords: ["شام کو", "رات کو", "شام", "رات"], schedule: { morning: false, afternoon: false, evening: true } },
+];
+
+/* ── Meal relation extraction ───────────────────────────────────── */
+
+const MEAL_PATTERNS: Array<{ pattern: RegExp; value: string }> = [
+  { pattern: /before\s*meal|کھانے\s*سے\s*پہلے|پہلے\s*کھانا/i, value: "before_meals" },
+  { pattern: /after\s*meal|کھانے\s*کے\s*بعد|بعد\s*کھانا/i, value: "after_meals" },
+  { pattern: /with\s*meal|کھانے\s*کے\s*ساتھ|کھانے\s*میں/i, value: "with_meals" },
+  { pattern: /as\s*needed|ضرورت\s*کے\s*مطابق/i, value: "as_needed" },
+];
+
+function extractMealRelation(text: string): string {
+  for (const { pattern, value } of MEAL_PATTERNS) {
+    if (pattern.test(text)) return value;
+  }
+  return "unspecified";
+}
+
+/* ── Parse sig string ───────────────────────────────────────────── */
+
+function parseSigString(text: string): { morning: boolean; afternoon: boolean; evening: boolean } | null {
+  const lower = text.toLowerCase().trim();
+  if (!lower) return null;
+
+  // 1) Try numeric sig patterns
+  for (const { pattern, schedule } of SIG_PATTERNS) {
+    if (pattern.test(lower)) return schedule;
+  }
+
+  // 2) Try keyword matching
+  for (const entry of KEYWORD_MAP) {
+    for (const kw of entry.keywords) {
+      if (lower.includes(kw.toLowerCase())) return entry.schedule;
+    }
+  }
+
+  return null;
+}
+
+/* ── Public API ─────────────────────────────────────────────────── */
+
 /**
- * Parse a medication's dosage schedule into a normalised ParsedSchedule.
+ * Parse a medication's schedule from its `dosage_schedule` JSONB or
+ * fallback `timing` / `frequency` strings.
  *
- * Handles three input shapes:
- * 1. DosageSchedulePayload object with morning/afternoon/evening booleans
- * 2. A timing string like "morning,night" or "twice daily"
- * 3. A frequency string like "1-0-1" (morning-noon-night count)
+ * Returns a normalised ParsedSchedule that the planner can use to
+ * determine which time windows a medication belongs to.
  */
 export function parseMedSchedule(
   dosageSchedule: DosageSchedulePayload | Record<string, unknown> | null | undefined,
   timing: string | null | undefined,
   frequency: string | null | undefined,
 ): ParsedSchedule {
-  const result: ParsedSchedule = {
-    morning: false,
-    noon: false,
-    night: false,
-    frequency: frequency || "",
-  };
-
-  // Try dosage_schedule object first
+  // 1) Explicit dosage_schedule object
   if (dosageSchedule && typeof dosageSchedule === "object") {
-    const ds = dosageSchedule as Record<string, unknown>;
-    result.morning = Boolean(ds.morning);
-    // Map "afternoon" → noon, "evening" → night
-    result.noon = Boolean(ds.afternoon);
-    result.night = Boolean(ds.evening);
+    const s = dosageSchedule as Record<string, unknown>;
+    const morning = Boolean(s.morning);
+    const afternoon = Boolean(s.afternoon);
+    const evening = Boolean(s.evening);
 
-    // If at least one slot is set, return early
-    if (result.morning || result.noon || result.night) {
-      return result;
+    // If at least one slot is explicitly set, use it
+    if (morning || afternoon || evening) {
+      const freq = typeof s.frequency_per_day === "number"
+        ? s.frequency_per_day
+        : [morning, afternoon, evening].filter(Boolean).length;
+      const meal = typeof s.meal_relation === "string" ? s.meal_relation : "unspecified";
+      return { morning, afternoon, evening, frequency_per_day: freq, meal_relation: meal };
     }
   }
 
-  // Try timing string (comma-separated slot names)
-  if (timing) {
-    const lower = timing.toLowerCase();
-    if (lower.includes("morning")) result.morning = true;
-    if (lower.includes("afternoon") || lower.includes("noon") || lower.includes("midday")) {
-      result.noon = true;
-    }
-    if (lower.includes("evening") || lower.includes("night")) result.night = true;
+  // 2) Fallback: parse timing string
+  const combined = `${timing || ""} ${frequency || ""}`.trim();
+  const parsed = parseSigString(combined);
 
-    if (result.morning || result.noon || result.night) {
-      return result;
-    }
+  if (parsed) {
+    const freq = [parsed.morning, parsed.afternoon, parsed.evening].filter(Boolean).length;
+    return {
+      ...parsed,
+      frequency_per_day: freq || 1,
+      meal_relation: extractMealRelation(combined),
+    };
   }
 
-  // Try frequency string in "1-0-1" format (morning-noon-night)
-  if (frequency) {
-    const parts = frequency.split(/[-–]/).map((p) => parseInt(p.trim(), 10));
-    if (parts.length >= 3 && parts.every((p) => !isNaN(p))) {
-      result.morning = parts[0] > 0;
-      result.noon = parts[1] > 0;
-      result.night = parts[2] > 0;
-      return result;
-    }
-
-    // Fallback: keyword-based frequency
-    const lower = frequency.toLowerCase();
-    if (lower.includes("morning")) result.morning = true;
-    if (lower.includes("afternoon") || lower.includes("noon")) result.noon = true;
-    if (lower.includes("evening") || lower.includes("night")) result.night = true;
-  }
-
-  // Default: once daily → morning
-  if (!result.morning && !result.noon && !result.night) {
-    result.morning = true;
-  }
-
-  return result;
+  // 3) Ultimate fallback: default to morning only
+  return {
+    morning: true,
+    afternoon: false,
+    evening: false,
+    frequency_per_day: 1,
+    meal_relation: extractMealRelation(combined),
+  };
 }
 
 /**
- * Return the list of active slot keys for a parsed schedule.
+ * Given a ParsedSchedule, return which SlotKeys this medication belongs to.
  */
 export function getSlotsForSchedule(schedule: ParsedSchedule): SlotKey[] {
   const slots: SlotKey[] = [];
   if (schedule.morning) slots.push("morning");
-  if (schedule.noon) slots.push("noon");
-  if (schedule.night) slots.push("night");
+  if (schedule.afternoon) slots.push("noon");
+  if (schedule.evening) slots.push("night");
   return slots;
 }
