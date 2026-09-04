@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import Sidebar from "@/components/layout/Sidebar";
-import VoiceAssistantWidget from "@/components/voice/VoiceAssistantWidget";
 import { useAuth } from "@/context/AuthContext";
 
 export default function DashboardLayout({
@@ -99,9 +98,6 @@ export default function DashboardLayout({
           {children}
         </main>
       </div>
-
-      {/* ── Floating Voice Assistant ────────────────────── */}
-      <VoiceAssistantWidget />
     </div>
   );
 }

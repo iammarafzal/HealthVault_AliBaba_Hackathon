@@ -58,13 +58,6 @@ from app.schemas.interpreter import (  # noqa: F401
     PrescriptionChatRequest,
     PrescriptionChatResponse,
 )
-from app.schemas.voice import (  # noqa: F401
-    VoiceIntentRequest,
-    VoiceIntentResponse,
-    VoiceQueryRequest,
-    VoiceQueryResponse,
-    VoiceTranscriptionResponse,
-)
 from app.schemas.medications import (  # noqa: F401
     ActiveMedicationsResponse,
     AllMedicationsResponse,
@@ -125,12 +118,6 @@ __all__ = [
     "DrugInteractionAlert",
     "InteractionCheckRequest",
     "InteractionCheckResponse",
-    # Voice
-    "VoiceIntentRequest",
-    "VoiceIntentResponse",
-    "VoiceQueryRequest",
-    "VoiceQueryResponse",
-    "VoiceTranscriptionResponse",
     # Medications
     "ActiveMedicationsResponse",
     "AllMedicationsResponse",

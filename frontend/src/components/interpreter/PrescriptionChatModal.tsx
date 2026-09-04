@@ -51,13 +51,10 @@ export default function PrescriptionChatModal({
   const [inputQuery, setInputQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [suggestedFollowups, setSuggestedFollowups] = useState<string[]>([]);
-  const [isListening, setIsListening] = useState(false);
-  const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<"chat" | "cards">("chat");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<any>(null);
 
   const isUrdu = lang === "ur";
   const medications = record?.medications || [];
@@ -92,46 +89,6 @@ export default function PrescriptionChatModal({
   }, [isOpen, lang, record]);
 
   // Scroll to bottom on new message
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
-
-  // Speech Recognition Setup (Web Speech API)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = lang === "ur" ? "ur-PK" : "en-US";
-
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setInputQuery(transcript);
-      setIsListening(false);
-    };
-
-    recognition.onerror = () => {
-      setIsListening(false);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    recognitionRef.current = recognition;
-  }, [lang]);
-
-  // Speech Synthesis Cleanup
-  useEffect(() => {
-    if (!isOpen && typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      setSpeakingIndex(null);
-    }
-  }, [isOpen]);
 
   // Escape key handler
   useEffect(() => {
@@ -160,12 +117,6 @@ export default function PrescriptionChatModal({
   const handleSendMessage = async (queryText?: string) => {
     const query = (queryText || inputQuery).trim();
     if (!query || isLoading) return;
-
-    // Stop active audio
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      setSpeakingIndex(null);
-    }
 
     const newMessages: ChatMessage[] = [
       ...messages,
@@ -200,58 +151,6 @@ export default function PrescriptionChatModal({
       setMessages((prev) => [...prev, { role: "assistant", content: fallbackMsg }]);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  /* ── Read Message Aloud (Speech Synthesis) ── */
-  const toggleSpeak = (text: string, index: number) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      alert(isUrdu ? "آواز کی سہولت دستیاب نہیں ہے۔" : "Speech synthesis not supported.");
-      return;
-    }
-
-    if (speakingIndex === index) {
-      window.speechSynthesis.cancel();
-      setSpeakingIndex(null);
-      return;
-    }
-
-    window.speechSynthesis.cancel();
-    const cleanText = text.replace(/[*#_`]/g, "");
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-
-    const voices = window.speechSynthesis.getVoices();
-    const urduVoice =
-      voices.find((v) => v.lang.toLowerCase().includes("ur")) ||
-      voices.find((v) => v.lang.toLowerCase().includes("ar")) ||
-      voices.find((v) => v.lang.toLowerCase().includes("hi")) ||
-      voices[0];
-
-    if (urduVoice) utterance.voice = urduVoice;
-    utterance.lang = lang === "ur" ? "ur-PK" : "en-US";
-    utterance.rate = 0.85;
-
-    utterance.onstart = () => setSpeakingIndex(index);
-    utterance.onend = () => setSpeakingIndex(null);
-    utterance.onerror = () => setSpeakingIndex(null);
-
-    window.speechSynthesis.speak(utterance);
-  };
-
-  /* ── Voice Input Toggle ── */
-  const toggleVoiceInput = () => {
-    if (!recognitionRef.current) {
-      alert(isUrdu ? "مائیکروفون کی سہولت دستیاب نہیں ہے۔" : "Microphone not supported in this browser.");
-      return;
-    }
-
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      setIsListening(true);
-      recognitionRef.current.lang = lang === "ur" ? "ur-PK" : "en-US";
-      recognitionRef.current.start();
     }
   };
 
@@ -376,7 +275,6 @@ export default function PrescriptionChatModal({
           <div className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
             {messages.map((msg, idx) => {
               const isAssistant = msg.role === "assistant";
-              const isSpeaking = speakingIndex === idx;
 
               return (
                 <div
@@ -466,33 +364,13 @@ export default function PrescriptionChatModal({
               }}
               className="flex items-center gap-2"
             >
-              {/* Mic voice input button */}
-              <Button
-                type="button"
-                variant={isListening ? "destructive" : "outline"}
-                size="icon"
-                className={`h-10 w-10 shrink-0 rounded-xl transition-all ${
-                  isListening
-                    ? "animate-pulse bg-red-600 text-white"
-                    : "border-vault-border text-vault-teal hover:bg-vault-teal/10 dark:border-border dark:text-teal-300"
-                }`}
-                onClick={toggleVoiceInput}
-                title={isUrdu ? "بول کر سوال پوچھیں" : "Speak your question"}
-              >
-                {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-              </Button>
-
               {/* Text Input */}
               <input
                 type="text"
                 value={inputQuery}
                 onChange={(e) => setInputQuery(e.target.value)}
                 placeholder={
-                  isListening
-                    ? isUrdu
-                      ? "سن رہا ہوں، بولیں…"
-                      : "Listening, please speak…"
-                    : isUrdu
+                  isUrdu
                     ? "نسخے یا دوا کے بارے میں کوئی بھی سوال پوچھیں…"
                     : "Ask any question about your prescription or medicines…"
                 }
@@ -530,9 +408,6 @@ export default function PrescriptionChatModal({
                 onClick={() => {
                   setMessages([]);
                   setInputQuery("");
-                  if (typeof window !== "undefined" && "speechSynthesis" in window) {
-                    window.speechSynthesis.cancel();
-                  }
                 }}
                 className="flex items-center gap-1 font-bold text-muted-foreground hover:text-foreground"
               >
