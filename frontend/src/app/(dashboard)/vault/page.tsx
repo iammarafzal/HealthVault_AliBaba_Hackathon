@@ -453,7 +453,7 @@ function VaultPageInner() {
               <button
                 type="button"
                 onClick={() => setViewMode("grid")}
-                className={`rounded-md px-2.5 py-1 text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                className={`rounded-md px-2 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all ${
                   viewMode === "grid"
                     ? "bg-[#0D5C4A] text-white shadow-xs dark:bg-[#0A8C6A]"
                     : "text-[#3D5450] dark:text-[#B2DFD4] hover:text-[#1A2826]"
@@ -461,12 +461,12 @@ function VaultPageInner() {
                 aria-label="Grid view"
               >
                 <LayoutGrid className="h-3.5 w-3.5" />
-                <span>{t("vault.viewGrid", "Grid")}</span>
+                <span className="hidden sm:inline">{t("vault.viewGrid", "Grid")}</span>
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode("table")}
-                className={`rounded-md px-2.5 py-1 text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                className={`rounded-md px-2 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all ${
                   viewMode === "table"
                     ? "bg-[#0D5C4A] text-white shadow-xs dark:bg-[#0A8C6A]"
                     : "text-[#3D5450] dark:text-[#B2DFD4] hover:text-[#1A2826]"
@@ -474,14 +474,14 @@ function VaultPageInner() {
                 aria-label="Table view"
               >
                 <List className="h-3.5 w-3.5" />
-                <span>{t("vault.viewTable", "Table")}</span>
+                <span className="hidden sm:inline">{t("vault.viewTable", "Table")}</span>
               </button>
             </div>
           </div>
         </div>
 
         {/* Filter Pills */}
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto pb-1">
           {typeFilters.map((tf) => {
             const label = t(tf.labelKey, tf.defaultLabel);
             return (

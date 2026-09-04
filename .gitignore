@@ -24,6 +24,9 @@ wheels/
 .installed.cfg
 *.egg
 
+# ── Exception: Frontend src/lib/ contains TypeScript utilities ───────────────
+!frontend/src/lib/
+
 # ── Virtual Environments ─────────────────────────────────────────────────────
 .venv/
 venv/
