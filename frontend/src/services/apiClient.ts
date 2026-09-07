@@ -8,11 +8,15 @@
 
 import axios from "axios";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+const rawBaseUrl =
+  process.env.NEXT_PUBLIC_API_URL || "https://healthvault-backend.onrender.com";
+const API_BASE_URL = rawBaseUrl.endsWith("/api/v1")
+  ? rawBaseUrl
+  : `${rawBaseUrl.replace(/\/$/, "")}/api/v1`;
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 60000, // 60s timeout to tolerate Render free tier cold starts (~30-50s)
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",

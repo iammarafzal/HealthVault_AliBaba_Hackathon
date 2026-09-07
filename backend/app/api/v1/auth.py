@@ -9,13 +9,14 @@ import string
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.security import create_access_token, hash_password, verify_password
+from app.core.rate_limiter import limiter
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.privacy import PrivacySettings
@@ -37,7 +38,9 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
     status_code=status.HTTP_201_CREATED,
     summary="Register with Full Name, Email & Password — instant JWT issued",
 )
+@limiter.limit("5/minute")
 async def register(
+    request: Request,
     body: UserRegisterRequest,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
@@ -115,7 +118,9 @@ async def register(
     status_code=status.HTTP_200_OK,
     summary="Authenticate with email + password and receive a JWT",
 )
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
     body: UserLogin,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:

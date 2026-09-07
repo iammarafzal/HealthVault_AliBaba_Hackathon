@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: healthvault_backend_prod
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://healthvault_user:secure_password_prod@db:5432/healthvault_db}
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://healthvault.app,https://staging.healthvault.app}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://healthvault.app,https://staging.healthvault.app}
+      - FRONTEND_URL=${FRONTEND_URL:-https://healthvault.app}
+    volumes:
+      - uploads_data:/app/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  uploads_data:

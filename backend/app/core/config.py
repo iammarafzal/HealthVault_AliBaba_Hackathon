@@ -1,6 +1,6 @@
 from functools import lru_cache
 from typing import List, Optional, Union
-from pydantic import field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,7 +16,10 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://user:password@localhost:5432/healthvault"
+    DATABASE_URL: str = Field(
+        default="postgresql+asyncpg://user:password@localhost:5432/healthvault",
+        description="Async PostgreSQL connection string",
+    )
 
     # Local File Storage (served via FastAPI StaticFiles mount)
     UPLOAD_DIR: str = "uploads"
@@ -24,7 +27,16 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
 
     # Authentication & Security
-    SECRET_KEY: str = "change-me-to-a-random-secret"
+    SECRET_KEY: str = Field(
+        default="change-me-to-a-random-secret-key-healthvault-prod-min32bytes",
+        min_length=32,
+        description="Master cryptographic secret key (min length 32)",
+    )
+    JWT_SECRET_KEY: Optional[str] = Field(
+        default=None,
+        min_length=32,
+        description="Optional separate secret key for signing JWTs",
+    )
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
@@ -87,15 +99,55 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
         "http://localhost:8000",
     ]
+    ALLOWED_ORIGINS: Optional[Union[List[str], str]] = None
 
-    @field_validator("CORS_ORIGINS", mode="before")
+    @field_validator("CORS_ORIGINS", "ALLOWED_ORIGINS", mode="before")
     @classmethod
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+    def assemble_cors_origins(cls, v: Union[None, str, List[str]]) -> Optional[Union[List[str], str]]:
+        if v is None:
+            return v
         if isinstance(v, str) and not v.startswith("["):
             return [i.strip() for i in v.split(",") if i.strip()]
         elif isinstance(v, (list, str)):
             return v
         raise ValueError(v)
+
+    @property
+    def effective_jwt_secret(self) -> str:
+        return self.JWT_SECRET_KEY or self.SECRET_KEY
+
+    @property
+    def effective_cors_origins(self) -> List[str]:
+        target = self.ALLOWED_ORIGINS if self.ALLOWED_ORIGINS is not None else self.CORS_ORIGINS
+        origins: List[str] = []
+        if isinstance(target, str):
+            origins = [i.strip() for i in target.split(",") if i.strip()]
+        elif isinstance(target, list):
+            origins = [str(item) for item in target]
+
+        if self.FRONTEND_URL and self.FRONTEND_URL.strip() not in origins:
+            origins.append(self.FRONTEND_URL.strip())
+        return origins
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        if self.ENVIRONMENT.lower() in ("production", "prod"):
+            insecure_defaults = [
+                "change-me-to-a-random-secret",
+                "change-me-to-a-random-secret-key-healthvault-prod-min32bytes",
+                "secret",
+                "password",
+                "123456",
+            ]
+            if any(default_str in self.SECRET_KEY.lower() for default_str in insecure_defaults):
+                raise ValueError("Production mode requires a strict, non-default SECRET_KEY (min 32 chars).")
+            if self.JWT_SECRET_KEY and any(default_str in self.JWT_SECRET_KEY.lower() for default_str in insecure_defaults):
+                raise ValueError("Production mode requires a strict, non-default JWT_SECRET_KEY.")
+
+            origins = self.effective_cors_origins
+            if "*" in origins or "http://*" in origins:
+                raise ValueError("Insecure CORS wildcard ('*') is strictly prohibited in production mode.")
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env",

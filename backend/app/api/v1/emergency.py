@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.rate_limiter import limiter
 from app.core.mock_data import MOCK_EMERGENCY_PROFILE
 from app.models.emergency_contact import EmergencyContact
 from app.models.emergency_scan import EmergencyScanLog
@@ -109,6 +110,7 @@ async def get_shared_alert_streams(
     "/gateway/{health_id}",
     summary="Emergency QR scan gateway — validates token, dispatches ICE alert, and mints HTTP-Only session cookie",
 )
+@limiter.limit("10/minute")
 async def emergency_scan_gateway(
     health_id: str,
     request: Request,
@@ -182,14 +184,21 @@ async def emergency_scan_gateway(
     target_url = f"{settings.FRONTEND_URL}/emergency/{health_id}/view"
     response = RedirectResponse(url=target_url, status_code=status.HTTP_302_FOUND)
     
-    is_secure = not settings.DEBUG and settings.ENVIRONMENT.lower() == "production"
+    is_prod_or_vercel = (
+        settings.ENVIRONMENT.lower() in ("production", "prod")
+        or "vercel.app" in settings.FRONTEND_URL
+        or "onrender.com" in settings.SERVER_BASE_URL
+    )
+    samesite_val = "none" if is_prod_or_vercel else "lax"
+    secure_val = True if (is_prod_or_vercel or samesite_val == "none") else False
+
     response.set_cookie(
         key="hv_triage_session",
         value=session_token,
         max_age=900,
         httponly=True,
-        secure=is_secure,
-        samesite="lax",
+        secure=secure_val,
+        samesite=samesite_val,
         path="/",
     )
     return response
