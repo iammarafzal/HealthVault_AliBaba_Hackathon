@@ -49,9 +49,12 @@ async def lifespan(app: FastAPI):
     app.state.http_client = httpx.AsyncClient(timeout=settings.LLM_TIMEOUT_SECONDS)
 
     # Ensure all database tables exist
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database schema validated and tables verified.")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database schema validated and tables verified.")
+    except Exception as db_err:
+        logger.warning(f"Database schema validation deferred (startup connection failed: {db_err}).")
 
     # Ensure the local uploads directory exists before serving files
     await storage_service.ensure_directory()
