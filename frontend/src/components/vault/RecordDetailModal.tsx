@@ -126,18 +126,20 @@ export default function RecordDetailModal({
   }, [isOpen, record?.id]);
 
   const resolvedPreview = useMemo(() => {
-    if (!record?.file_url) return "";
-    return resolveFileUrl(record.file_url);
-  }, [record?.file_url]);
+    const rawTarget = record?.signed_url || record?.file_url || record?.document_url;
+    if (!rawTarget) return "";
+    return resolveFileUrl(rawTarget);
+  }, [record?.signed_url, record?.file_url, record?.document_url]);
 
   const isPdf = useMemo(() => {
     if (!resolvedPreview) return false;
+    const checkPath = record?.document_url || record?.file_url || resolvedPreview;
     return (
       resolvedPreview.startsWith("blob:")
-        ? record?.file_url.toLowerCase().endsWith(".pdf")
-        : resolvedPreview.toLowerCase().endsWith(".pdf")
+        ? checkPath.toLowerCase().split("?")[0].endsWith(".pdf")
+        : resolvedPreview.toLowerCase().split("?")[0].endsWith(".pdf")
     );
-  }, [resolvedPreview, record?.file_url]);
+  }, [resolvedPreview, record?.file_url, record?.document_url]);
 
   if (!mounted || !isOpen || !record) return null;
 
@@ -534,7 +536,7 @@ export default function RecordDetailModal({
           {/* ════════ TAB 2: ORIGINAL DOCUMENT ════════ */}
           {activeTab === "document" && (
             <div className="space-y-3">
-              {record.file_url ? (
+              {(record.signed_url || record.file_url || record.document_url) ? (
                 <>
                   <div className="relative flex min-h-[460px] flex-col items-center justify-start overflow-auto rounded-xl border border-[#DCE8E5] dark:border-white/10 bg-[#F9FBFA] dark:bg-[#1A2826] p-4 shadow-inner">
                     {isPdf ? (

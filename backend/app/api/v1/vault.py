@@ -16,7 +16,7 @@ import uuid
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -49,9 +49,39 @@ from app.services.pharmacopoeia import (
     sanitize_dosage_fractions,
     validate_sig_frequency,
 )
+from pathlib import Path
 from app.services.persistence_service import persistence_service
-from app.services.storage_service import storage_service
+from app.services.storage_service import (
+    generate_signed_document_url,
+    get_supabase_client,
+    storage_service,
+    upload_medical_document_private,
+)
 from app.services.vision_provider import VisionProviderError, get_vision_provider
+from app.agents.graphs.extraction_graph import run_document_extraction, document_extraction_graph
+
+
+def extract_storage_path(url_or_path: str) -> str:
+    """Extract clean storage path (e.g. 'anon/abc.jpg' or '{user_id}/{uuid}.jpg')
+    from a full Supabase signed/public URL or relative path, ensuring no tokens or domains
+    are saved to the database."""
+    if not url_or_path:
+        return ""
+    clean = url_or_path.split("?")[0]
+    bucket = settings.SUPABASE_STORAGE_BUCKET
+    patterns = [
+        f"/storage/v1/object/sign/{bucket}/",
+        f"/storage/v1/object/public/{bucket}/",
+        f"/storage/v1/object/authenticated/{bucket}/",
+        f"/storage/v1/object/{bucket}/",
+        "/api/v1/vault/raw-proxy/",
+        "/uploads/documents/",
+        "/uploads/",
+    ]
+    for p in patterns:
+        if p in clean:
+            return clean.split(p)[-1].lstrip("/")
+    return clean.lstrip("/")
 
 logger = logging.getLogger("healthvault")
 
@@ -166,18 +196,25 @@ async def upload_document(
     """Save the file to local disk and store record metadata in PostgreSQL."""
     _validate_document_type(document_type)
 
-    _, document_url = await storage_service.save_file(file, subfolder="documents")
+    file_bytes = await file.read()
+    storage_path, _ = await upload_medical_document_private(
+        file_bytes=file_bytes,
+        original_filename=file.filename or "document.jpg",
+        user_id=str(user_id),
+    )
 
     record = MedicalRecord(
         user_id=user_id,
         document_type=document_type,
-        document_url=document_url,
+        document_url=storage_path,
         extracted_data={},
     )
     db.add(record)
     await db.flush()
     await db.refresh(record)
-    return MedicalRecordResponse.model_validate(record)
+    resp = MedicalRecordResponse.model_validate(record)
+    resp.signed_url = generate_signed_document_url(record.document_url, expires_in=1800)
+    return resp
 
 
 @router.post(
@@ -197,60 +234,63 @@ async def extract_draft(
     If not, the response contains is_medical_document=false with a rejection_reason.
     If valid, the response includes the AI-detected category and extracted entities.
     """
-    _, temp_file_url = await storage_service.save_file(file, subfolder="documents")
-    image_bytes = await file.read()
-    if not image_bytes:
+    file_bytes = await file.read()
+    if not file_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Uploaded document is empty.",
         )
 
-    provider = get_vision_provider()
+    storage_path, optimized_bytes = await upload_medical_document_private(
+        file_bytes=file_bytes,
+        original_filename=file.filename or "document.jpg",
+        user_id=str(user_id),
+    )
+    temp_file_url = generate_signed_document_url(storage_path, expires_in=1800) or storage_path
+
     try:
-        extracted = await provider.extract_document_data(
-            image_bytes=image_bytes,
+        final_state = await run_document_extraction(
+            file_bytes=optimized_bytes,
             mime_type=file.content_type or "application/octet-stream",
-            document_type=document_type,
+            document_type_hint=document_type,
+            is_approved=False,
+            user_id=str(user_id),
+            file_url=temp_file_url,
         )
-    except VisionProviderError as exc:
-        logger.warning("Vision extraction failed for user %s: %s", user_id, exc)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from exc
     except Exception as exc:
-        logger.exception("Unexpected vision extraction failure: %s", exc)
+        logger.exception("Vision extraction failed via DocumentExtractionGraph: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Vision extraction failed. Please retry or configure a valid provider key.",
         ) from exc
 
     # ── Check medical document validation gate ──
-    is_medical = extracted.get("is_medical_document", True)
+    is_medical = final_state.get("is_valid_medical_doc", True)
     if not is_medical:
         return DocumentDraftExtractionResponse(
             temp_file_url=temp_file_url,
             is_medical_document=False,
-            rejection_reason=extracted.get("rejection_reason"),
+            rejection_reason=final_state.get("rejection_reason"),
             detected_document_type=None,
-            confidence_score=extracted.get("confidence_score", 0.0),
+            confidence_score=final_state.get("confidence_score", 0.0),
             document_type="other_medical",
             extracted_data=None,
         )
 
     # ── Valid medical document — use AI-detected category ──
-    detected_type = extracted.get("detected_document_type") or document_type
+    detected_type = final_state.get("category") or document_type
     if detected_type not in VALID_DOCUMENT_TYPES:
         detected_type = "other_medical"
 
+    draft_entities = final_state.get("draft_entities") or {}
     return DocumentDraftExtractionResponse(
         temp_file_url=temp_file_url,
         is_medical_document=True,
         rejection_reason=None,
         detected_document_type=detected_type,
-        confidence_score=extracted.get("confidence_score", 0.9),
+        confidence_score=final_state.get("confidence_score", 0.9),
         document_type=detected_type,
-        extracted_data=ExtractedEntities.model_validate(extracted),
+        extracted_data=ExtractedEntities.model_validate(draft_entities),
     )
 
 
@@ -309,13 +349,13 @@ async def upload_document_stream(
             await asyncio.sleep(0.1)
 
             # Store document and preprocess handwriting (deskew, CLAHE contrast, unsharp mask)
-            upload_copy = UploadFile(
-                filename=original_filename,
-                file=io.BytesIO(file_bytes),
-                headers=file.headers,
+            storage_path, optimized_bytes = await upload_medical_document_private(
+                file_bytes=file_bytes,
+                original_filename=original_filename,
+                user_id=str(user_id),
             )
-            _, temp_file_url = await storage_service.save_file(upload_copy, subfolder="documents")
-            processed_bytes = preprocess_clinical_image(file_bytes, mime_type)
+            temp_file_url = generate_signed_document_url(storage_path, expires_in=1800) or storage_path
+            processed_bytes = preprocess_clinical_image(optimized_bytes, mime_type)
 
             # ── Event 2: Identifying medicines & dosages ──
             yield _sse_event("progress", {
@@ -547,10 +587,12 @@ async def confirm_record(
 
     data = _entities_to_persistence_payload(payload.confirmed_data)
 
+    storage_path = extract_storage_path(payload.file_url)
+
     record = MedicalRecord(
         user_id=payload.user_id,
         document_type=payload.document_type,
-        document_url=payload.file_url,
+        document_url=storage_path,
         raw_ocr_text=payload.confirmed_data.raw_text,
         extracted_data=data,
         doctor_name=payload.confirmed_data.doctor_name,
@@ -572,7 +614,9 @@ async def confirm_record(
     saved_record = await _load_record_with_entities(db, record.id)
     if not saved_record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found after save.")
-    return MedicalRecordResponse.model_validate(saved_record)
+    resp = MedicalRecordResponse.model_validate(saved_record)
+    resp.signed_url = generate_signed_document_url(saved_record.document_url, expires_in=1800)
+    return resp
 
 
 from app.agents.vault_graph import vault_graph
@@ -592,27 +636,28 @@ async def upload_and_extract(
     """End-to-end flow: file storage → LangGraph pipeline extraction → persistence."""
     _validate_document_type(document_type)
 
-    # 1) Persist uploaded file to storage (returns public URL)
-    _, document_url = await storage_service.save_file(
-        file, subfolder="documents"
+    file_bytes = await file.read()
+    storage_path, optimized_bytes = await upload_medical_document_private(
+        file_bytes=file_bytes,
+        original_filename=file.filename or "document.jpg",
+        user_id=str(user_id),
     )
 
     # 2) Fallback mock branch when explicitly in mock mode.
     if settings.USE_MOCK:
         new_record_id = uuid.uuid4()
+        mock_signed_url = generate_signed_document_url(storage_path, expires_in=1800) or storage_path
         if document_type == "lab_report":
             return MOCK_LAB_EXTRACTION.model_copy(
-                update={"record_id": new_record_id}
+                update={"record_id": new_record_id, "document_url": mock_signed_url}
             )
         return MOCK_PRESCRIPTION_EXTRACTION.model_copy(
-            update={"record_id": new_record_id}
+            update={"record_id": new_record_id, "document_url": mock_signed_url}
         )
 
     # 3) Run the LangGraph document extraction workflow
-    image_bytes = await file.read()
-    
     state_input = {
-        "file_bytes": image_bytes,
+        "file_bytes": optimized_bytes,
         "mime_type": file.content_type or "application/octet-stream",
         "document_type_hint": document_type,
     }
@@ -659,7 +704,7 @@ async def upload_and_extract(
     record = MedicalRecord(
         user_id=user_id,
         document_type=document_type,
-        document_url=document_url,
+        document_url=storage_path,
         raw_ocr_text=raw_ocr,
         extracted_data=extracted,
         doctor_name=doc_name,
@@ -678,6 +723,8 @@ async def upload_and_extract(
         extracted_data=extracted,
     )
 
+    signed_doc_url = generate_signed_document_url(storage_path, expires_in=1800) or storage_path
+
     # 5) Return strictly validated ExtractionResponse for legacy clients.
     return ExtractionResponse(
         record_id=record.id,
@@ -693,9 +740,36 @@ async def upload_and_extract(
         test_date=_as_iso_date(extracted.get("consultation_date")) if document_type == "lab_report" else None,
         surgical_notes=[],
         follow_up_instructions=[],
-        document_url=document_url,
+        document_url=signed_doc_url,
         raw_ocr_text=extracted.get("raw_text", ""),
     )
+
+
+@router.get(
+    "/records",
+    response_model=List[MedicalRecordResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get all medical records for the authenticated user",
+)
+async def get_my_records(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> List[MedicalRecordResponse]:
+    """Retrieve uploaded records with dynamically generated signed URLs for the authenticated user."""
+    query = (
+        select(MedicalRecord)
+        .where(MedicalRecord.user_id == current_user.id)
+        .options(selectinload(MedicalRecord.medications), selectinload(MedicalRecord.biomarkers))
+        .order_by(MedicalRecord.created_at.desc())
+    )
+    result = await db.execute(query)
+    records = result.scalars().all()
+    out: List[MedicalRecordResponse] = []
+    for r in records:
+        rec_dict = MedicalRecordResponse.model_validate(r)
+        rec_dict.signed_url = generate_signed_document_url(r.document_url, expires_in=1800)
+        out.append(rec_dict)
+    return out
 
 
 @router.get(
@@ -708,9 +782,12 @@ async def get_user_records(
     user_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> List[MedicalRecordResponse]:
-    """Retrieve uploaded records with extracted metadata for a given user."""
+    """Retrieve uploaded records with dynamically generated signed URLs for a given user."""
     if settings.USE_MOCK:
-        return get_mock_user_records(user_id)
+        mock_records = get_mock_user_records(user_id)
+        for m in mock_records:
+            m.signed_url = generate_signed_document_url(m.document_url, expires_in=1800)
+        return mock_records
 
     query = (
         select(MedicalRecord)
@@ -720,7 +797,12 @@ async def get_user_records(
     )
     result = await db.execute(query)
     records = result.scalars().all()
-    return [MedicalRecordResponse.model_validate(r) for r in records]
+    out: List[MedicalRecordResponse] = []
+    for r in records:
+        rec_dict = MedicalRecordResponse.model_validate(r)
+        rec_dict.signed_url = generate_signed_document_url(r.document_url, expires_in=1800)
+        out.append(rec_dict)
+    return out
 
 
 @router.delete(
@@ -768,3 +850,33 @@ async def delete_record(
         status="success",
         message="Record deleted successfully",
     )
+
+
+@router.get(
+    "/raw-proxy/{storage_path:path}",
+    summary="Secure proxy endpoint for local development or fallback storage",
+)
+async def raw_proxy_document(storage_path: str):
+    """Streams local fallback files when direct Supabase signed URLs are not in use."""
+    local_path = Path(settings.UPLOAD_DIR) / storage_path
+    if local_path.is_file():
+        ext = local_path.suffix.lower()
+        media_types = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".webp": "image/webp",
+            ".pdf": "application/pdf",
+        }
+        return FileResponse(path=local_path, media_type=media_types.get(ext, "application/octet-stream"))
+
+    client = get_supabase_client()
+    if client:
+        try:
+            bucket = settings.SUPABASE_STORAGE_BUCKET
+            file_bytes = client.storage.from_(bucket).download(storage_path)
+            return Response(content=file_bytes, media_type="image/jpeg")
+        except Exception as exc:
+            logger.error("Raw proxy download failed for %s: %s", storage_path, exc)
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")

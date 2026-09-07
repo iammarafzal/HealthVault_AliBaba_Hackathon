@@ -227,6 +227,8 @@ export interface MedicalRecord {
   user_id: string;
   document_type: string;
   file_url: string;
+  signed_url?: string;
+  document_url?: string;
   created_at: string;
   extracted_data: ExtractedEntities;
   /* Display metadata lifted from the backend record/extraction response */
@@ -275,6 +277,7 @@ export interface MedicalRecordResponse {
   user_id: string;
   document_type: string;
   document_url: string;
+  signed_url?: string;
   raw_ocr_text?: string;
   extracted_data: Record<string, unknown>;
   consultation_date?: string;
@@ -369,6 +372,17 @@ export interface DoctorSummaryResponse {
 // ---------------------------------------------------------------------------
 // Emergency Schemas
 // ---------------------------------------------------------------------------
+export interface EmergencyDocumentResponse {
+  id: string;
+  document_type: string;
+  document_url: string;
+  signed_url?: string;
+  doctor_name?: string;
+  hospital_name?: string;
+  consultation_date?: string;
+  created_at?: string;
+}
+
 export interface EmergencyProfileResponse {
   health_id: string;
   full_name: string;
@@ -379,6 +393,7 @@ export interface EmergencyProfileResponse {
   emergency_contacts: EmergencyContactCreate[];
   emergency_notes?: string | null;
   is_revoked: boolean;
+  documents?: EmergencyDocumentResponse[];
 }
 
 // ---------------------------------------------------------------------------

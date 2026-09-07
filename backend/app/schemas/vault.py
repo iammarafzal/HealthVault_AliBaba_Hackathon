@@ -122,6 +122,7 @@ class ExtractionResponse(BaseModel):
 class MedicalRecordBase(BaseModel):
     document_type: str
     document_url: str
+    signed_url: Optional[str] = None
     consultation_date: Optional[date] = None
     doctor_name: Optional[str] = None
     hospital_name: Optional[str] = None

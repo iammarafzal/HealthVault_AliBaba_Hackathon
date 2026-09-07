@@ -79,6 +79,9 @@ const DICT = {
     footerText:
       "HealthVault AI • Verified Emergency Triage System • Pakistan National Triage Network",
     securityTokenEnforced: "Health ID: {id} • Device-Locked Ephemeral Session",
+    permittedDocsTitle: "PERMITTED EMERGENCY PRESCRIPTIONS & RECORDS",
+    viewDoc: "View Document",
+    ephemeralBadge: "15-Min Ephemeral Access",
   },
   ur: {
     topBanner: "سرکاری ہنگامی طبی خلاصہ • فوری رسائی",
@@ -127,6 +130,9 @@ const DICT = {
     footerText:
       "ہیلتھ والٹ اے آئی • تصدیق شدہ ایمرجنسی ٹرائیج سسٹم • قومی ہنگامی نیٹ ورک",
     securityTokenEnforced: "شناختی نمبر: {id} • محفوظ ڈیوائس لاکڈ سیشن",
+    permittedDocsTitle: "ہنگامی طور پر مجاز نسخہ جات و طبی دستاویزات",
+    viewDoc: "دستاویز دیکھیں",
+    ephemeralBadge: "15 منٹ عارضی رسائی",
   },
 };
 
@@ -434,6 +440,7 @@ export default function EmergencySecureViewPage({ params }: EmergencyViewPagePro
   const hasConditions = profile.chronic_conditions && profile.chronic_conditions.length > 0;
   const hasMultipleContacts = profile.emergency_contacts && profile.emergency_contacts.length > 1;
   const hasEmergencyNotes = Boolean(profile.emergency_notes && profile.emergency_notes.trim());
+  const hasDocuments = Boolean(profile.documents && profile.documents.length > 0);
 
   return (
     <div
@@ -729,6 +736,76 @@ export default function EmergencySecureViewPage({ params }: EmergencyViewPagePro
                       </a>
                     </div>
                   ))}
+                </div>
+              </section>
+            )}
+
+            {/* Permitted Emergency Medical Documents & Prescriptions */}
+            {hasDocuments && (
+              <section className="rounded-2xl border border-slate-800 bg-[#111927] p-4 sm:p-5 space-y-3 shadow-md">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-teal-400 font-bold text-xs sm:text-sm uppercase tracking-wider">
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-teal-400" />
+                    <span>{t.permittedDocsTitle}</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-teal-400 bg-teal-500/10 border border-teal-500/20 px-2 py-0.5 rounded-full">
+                    {t.ephemeralBadge}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {profile.documents?.map((doc, idx) => {
+                    const docSrc = doc.signed_url || doc.document_url;
+                    const isPdfDoc = docSrc.toLowerCase().split("?")[0].endsWith(".pdf");
+                    return (
+                      <div
+                        key={doc.id || idx}
+                        className="rounded-xl border border-slate-800 bg-[#192436] p-3 space-y-2 flex flex-col justify-between"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-extrabold uppercase text-white tracking-wide">
+                              {doc.document_type.replace(/_/g, " ")}
+                            </span>
+                            {doc.consultation_date && (
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {doc.consultation_date}
+                              </span>
+                            )}
+                          </div>
+                          {(doc.doctor_name || doc.hospital_name) && (
+                            <p className="text-[11px] text-slate-300 truncate">
+                              {[doc.doctor_name, doc.hospital_name].filter(Boolean).join(" • ")}
+                            </p>
+                          )}
+                        </div>
+                        <div className="relative rounded-lg overflow-hidden border border-slate-700/60 bg-black/30 aspect-video flex items-center justify-center">
+                          {isPdfDoc ? (
+                            <iframe
+                              src={docSrc}
+                              className="h-full w-full pointer-events-none"
+                              tabIndex={-1}
+                              aria-label="Document preview"
+                            />
+                          ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={docSrc}
+                              alt={doc.document_type}
+                              className="h-full w-full object-contain"
+                            />
+                          )}
+                        </div>
+                        <a
+                          href={docSrc}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full text-center py-1.5 px-2.5 rounded-lg bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 border border-teal-500/30 text-xs font-semibold transition-all inline-block"
+                        >
+                          {t.viewDoc}
+                        </a>
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             )}

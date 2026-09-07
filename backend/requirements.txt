@@ -39,7 +39,8 @@ paddlepaddle>=2.6.0
 pypdf>=4.1.0
 pillow>=10.2.0
 
-# ── Cloud Object Storage (Alibaba Cloud OSS) ─────────────────────────────────
+# ── Cloud Object Storage (Supabase Storage & Alibaba Cloud OSS) ──────────────
+supabase>=2.31.0
 oss2>=2.18.4
 
 # ── Async Networking & Utilities ────────────────────────────────────────────

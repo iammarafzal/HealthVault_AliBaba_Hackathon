@@ -15,6 +15,7 @@ import type {
   MedicalRecordResponse,
   MedicationItem,
 } from "@/types/api";
+import { getApiBaseUrl } from "@/services/apiClient";
 
 /* ── Primitive guards ───────────────────────────────────────── */
 
@@ -147,11 +148,14 @@ export function parseExtractedData(
 /** Map a historical record (GET /vault/records/{user_id}) into the view model. */
 export function mapServerRecord(r: MedicalRecordResponse): MedicalRecord {
   const ed = (r.extracted_data || {}) as Record<string, unknown>;
+  const rawTarget = r.signed_url || r.document_url;
   return {
     id: r.id,
     user_id: r.user_id,
     document_type: r.document_type,
-    file_url: resolveFileUrl(r.document_url),
+    file_url: resolveFileUrl(rawTarget),
+    signed_url: r.signed_url,
+    document_url: r.document_url,
     created_at: r.created_at,
     extracted_data: parseExtractedData(ed, r.raw_ocr_text),
     doctor_name: r.doctor_name || asString(ed.doctor_name) || undefined,
@@ -201,16 +205,20 @@ export function mapExtractionToRecord(
 
 /* ── File URL helpers ───────────────────────────────────────── */
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
-
 /** Resolve a backend document_url into a browser-loadable URL. */
 export function resolveFileUrl(fileUrl?: string): string {
   if (!fileUrl) return "";
   if (/^https?:\/\//i.test(fileUrl) || fileUrl.startsWith("blob:")) {
     return fileUrl;
   }
-  const origin = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
+  const apiBase = getApiBaseUrl();
+  const origin = apiBase.replace(/\/api\/v1\/?$/, "");
+  if (fileUrl.startsWith("/api/v1/")) {
+    return `${origin}${fileUrl}`;
+  }
+  if (fileUrl.startsWith("api/v1/")) {
+    return `${origin}/${fileUrl}`;
+  }
   const cleanPath = fileUrl.replace(/^uploads\//, "/uploads/");
   return `${origin}${cleanPath.startsWith("/") ? "" : "/"}${cleanPath}`;
 }

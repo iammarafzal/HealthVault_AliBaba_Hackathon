@@ -23,7 +23,8 @@
 |---|---|
 | **Backend API** | FastAPI, Python 3.13 / 3.10+, Uvicorn (ASGI), Pydantic v2, Pydantic-Settings |
 | **Database & ORM** | PostgreSQL, SQLAlchemy 2.0 (AsyncIO), AsyncPG |
-| **AI / LLM Orchestration** | LangGraph, Alibaba Cloud DashScope (Qwen-Plus), Google AI Studio (Gemini 3.1 Flash Lite / 2.0 Flash) |
+| **Cloud Storage & Security** | Supabase Private Storage (HMAC-SHA256 Signed URLs, 1800s TTL), Alibaba Cloud OSS |
+| **AI / Multi-Agent Orchestration** | LangGraph 1.2+ (`StateGraph`), LangChain (LCEL), Alibaba Cloud DashScope (Qwen-Plus), Google AI Studio (Gemini 3.1 Flash Lite / 2.0 Flash) |
 | **OCR & Vision** | PaddleOCR (Local CPU/GPU), Pluggable Vision Engine (Gemini Flash, Qwen-VL, GPT-4o) |
 | **Real-Time & Notifications** | Web Push API (VAPID / PyWebPush), Service Worker (`sw.js`), Server-Sent Events (SSE / `ntfy.sh`) |
 | **Frontend Web App** | Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS, Lucide React, Sonner |
@@ -40,11 +41,13 @@ HealthVault_AI/
 ├── backend/                        # FastAPI Backend Application
 │   ├── app/
 │   │   ├── agents/                 # LangGraph workflows & multi-agent pipelines
-│   │   │   ├── vault_graph.py
-│   │   │   ├── interpreter_graph.py
-│   │   │   ├── interpreter_agent.py
-│   │   │   ├── summary_agent.py
-│   │   │   └── nodes.py
+│   │   │   ├── graphs/             # Compiled StateGraphs (Extraction, Interaction, RAG, Doctor Summary)
+│   │   │   ├── nodes/              # Isolated deterministic node functions (OCR, validation, safety, map-reduce)
+│   │   │   ├── state.py            # Typed state schemas (ExtractionState, InteractionState, InterpreterState, SummaryState)
+│   │   │   ├── interaction_agent.py # Pharmacology guard agent bridge
+│   │   │   ├── interpreter_agent.py # Prescription RAG agent bridge
+│   │   │   ├── summary_agent.py    # 1-Page clinical briefing agent bridge
+│   │   │   └── vault_graph.py      # Multimodal vault extraction pipeline
 │   │   ├── api/                    # REST API routers & dependency injection
 │   │   │   ├── v1/
 │   │   │   │   ├── auth.py
@@ -117,6 +120,69 @@ HealthVault_AI/
 │   └── tailwind.config.js
 └── README.md                       # Main project documentation
 ```
+
+---
+
+## 🧠 Multi-Agent Architecture (LangGraph & LangChain LCEL)
+
+HealthVault AI employs a modular multi-agent graph architecture built on **LangGraph 1.2+ (`StateGraph`)** and **LangChain (LCEL)**, replacing linear procedural execution with typed, resilient, and checkpointed clinical workflows:
+
+```mermaid
+graph TD
+    subgraph Workflow_A [Workflow A: Document Extraction Pipeline]
+        A1[Multimodal Image / PDF] --> A2[node_ocr_extract: Vision LLM / CLAHE Preprocessor]
+        A2 --> A3[node_entity_parse: Pydantic Schema Parsing]
+        A3 --> A4[node_safety_audit: Pakistani Pharmacopoeia Bounds Check]
+        A4 --> A5{node_human_review_pause: HITL Approval Gate}
+        A5 -->|Confirmed| A6[node_db_commit: PostgreSQL Storage & Hydration]
+        A5 -->|Draft Pause| A7[Draft Review Response]
+    end
+
+    subgraph Workflow_B [Workflow B: Drug Interaction & Allergy Guard]
+        B1[Proposed Medications] --> B2[node_allergy_crosscheck: Rule-Based Allergen Matching]
+        B2 -->|Critical Allergy Hit| B3[emergency_allergy_alert: High-Risk Flag]
+        B2 -->|Standard| B4[node_pairwise_drug_check: Parallel Drug-Drug Pairs]
+        B3 --> B4
+        B4 --> B5[node_severity_aggregator: Clinical Risk & Bilingual Alerts]
+    end
+
+    subgraph Workflow_C [Workflow C: Grounded Prescription Interpreter]
+        C1[Patient Chat / Question] --> C2[node_context_retriever: Structured Prescription Index]
+        C2 --> C3{node_guardrail_check: Anti-Hallucination Gate}
+        C3 -->|Out-of-Scope Diagnosis| C4[Clinical Refusal & Doctor Referral]
+        C3 -->|Valid Grounded Query| C5[node_grounded_response_gen: Bilingual Nastaliq Urdu / EN Explainer]
+    end
+
+    subgraph Workflow_D [Workflow D: 1-Page AI Doctor Clinical Summary]
+        D1[Patient History & Vault] --> D2[Map Worker 1: node_summarize_visits]
+        D1 --> D3[Map Worker 2: node_summarize_chronic]
+        D1 --> D4[Map Worker 3: node_summarize_lab_trends]
+        D2 & D3 & D4 --> D5[Reducer: node_compile_clinical_brief]
+        D5 --> D6[10-Second Physician Brief / A4 Visit Sheet]
+    end
+```
+
+### 1. Workflow A: Document Extraction Pipeline (`DocumentExtractionGraph`)
+* **`node_ocr_extract`**: Multimodal clinical document analysis via Gemini / Qwen-VL with unsharp mask, deskew, and CLAHE contrast enhancement.
+* **`node_entity_parse`**: Extraction into standardized Pydantic entities (`ExtractedEntities`).
+* **`node_safety_audit`**: Pakistani Pharmacopoeia validation (Levenshtein brand correction, fractional dosage preservation e.g. `0.5 tablet` / `آدھی گولی`, sig notation `1+0+1`).
+* **`node_human_review_pause`**: LangGraph state checkpoint awaiting patient or clinician verification before database commit.
+* **`node_db_commit`**: Commits verified records with duplicate checking and clinical entity hydration.
+
+### 2. Workflow B: Drug Interaction & Allergy Guard (`InteractionEvaluationGraph`)
+* **`node_allergy_crosscheck`**: Immediate deterministic rule check cross-referencing candidate drugs against patient documented allergies.
+* **`node_pairwise_drug_check`**: Parallel/fan-out evaluation of candidate medications against the patient's active regimen.
+* **`node_severity_aggregator`**: Synthesizes conflict severities (`critical`, `moderate`, `safe`), computes overall risk level, and generates bilingual recommendations with medical disclaimers.
+
+### 3. Workflow C: Grounded Prescription RAG & Patient Explainer (`InterpreterGraph`)
+* **`node_context_retriever`**: Grounded document context builder that indexes prescription items (medications, timings, food relations, diagnoses).
+* **`node_guardrail_check`**: Anti-hallucination guardrail that strictly refuses non-prescription medical diagnoses and directs patients to in-person care.
+* **`node_grounded_response_gen`**: Generates patient-friendly explanations in English and polished Nastaliq Urdu with timing schedules and audio scripts.
+
+### 4. Workflow D: 1-Page AI Doctor Clinical Summary (`DoctorSummaryGraph`)
+* **Map-Reduce Pattern**:
+  * **Map Phase**: Parallel workers evaluating past encounters (`node_summarize_visits`), chronic diagnoses/medications (`node_summarize_chronic`), and biomarker trajectories (`node_summarize_lab_trends`).
+  * **Reduce Phase**: Synthesis worker (`node_compile_clinical_brief`) generating a 10-second physician briefing.
 
 ---
 
@@ -240,15 +306,18 @@ npm run dev
 Ensure full system integrity across both backend and frontend layers:
 
 ```bash
-# 1. Run Complete Backend Pytest Suite (139 passing test cases)
+# 1. Run Complete Backend Pytest Suite (160 passing test cases across all units & graphs)
 cd backend
 pytest -v
 
-# 2. Verify Frontend TypeScript Compilation
+# 2. Run LangGraph Multi-Agent Workflows Specifically
+pytest -v tests/test_agents.py
+
+# 3. Verify Frontend TypeScript Compilation
 cd ../frontend
 npx tsc --noEmit
 
-# 3. Verify Production Bundle Build
+# 4. Verify Production Bundle Build
 npm run build
 ```
 
@@ -256,6 +325,7 @@ npm run build
 
 ## 🔒 Security & Privacy Architecture
 
+- **Private Storage with Signed URLs**: Patient prescription scans, lab reports, and radiology images are stored in a non-public Supabase Storage bucket. Access is strictly gated behind time-limited HMAC-SHA256 signed URLs (1800-second TTL), preventing direct bucket crawling or unauthenticated downloads.
 - **Token-Gated QR Protection**: Emergency cards contain cryptographic tokens; scans do not expose full patient records or PII unless explicitly permitted by the patient's privacy settings.
 - **Single-Use Ephemeral Triage**: Anti-sharing URL guards invalidate copied links to prevent unauthorized bystander access.
 - **Granular Consent Toggles**: Patients can mask blood group, specific drug allergies, active regimens, or emergency notes at any time from their settings dashboard.

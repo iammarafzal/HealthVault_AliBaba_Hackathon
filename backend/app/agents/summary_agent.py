@@ -19,6 +19,7 @@ from app.models.record import MedicalRecord
 from app.models.user import User
 from app.schemas.summary import DoctorSummaryResponse
 from app.services.llm_provider import get_llm_provider
+from app.agents.graphs.summary_graph import doctor_summary_graph, run_doctor_summary
 
 logger = logging.getLogger("healthvault")
 
@@ -200,6 +201,84 @@ class SummaryAgent:
             records=records,
             abnormal_biomarkers=abnormal_biomarkers,
         )
+
+    @staticmethod
+    async def generate_clinical_summary_graph(
+        db: AsyncSession,
+        user_id: UUID,
+    ) -> DoctorSummaryResponse:
+        """Execute clinical briefing generation via the LangGraph DoctorSummaryGraph (Map-Reduce)."""
+        user = await db.scalar(select(User).where(User.id == user_id))
+        if not user:
+            raise ValueError(f"User {user_id} not found")
+
+        active_meds = (
+            await db.scalars(
+                select(Medication).where(
+                    Medication.user_id == user_id,
+                    Medication.is_active.is_(True),
+                )
+            )
+        ).all()
+        allergies = (
+            await db.scalars(select(Allergy).where(Allergy.user_id == user_id))
+        ).all()
+        records = (
+            await db.scalars(select(MedicalRecord).where(MedicalRecord.user_id == user_id))
+        ).all()
+        abnormal_biomarkers = (
+            await db.scalars(
+                select(Biomarker).where(
+                    Biomarker.user_id == user_id,
+                    Biomarker.status != "normal",
+                )
+            )
+        ).all()
+
+        patient_dict = {
+            "full_name": getattr(user, "full_name", "") or "Unknown",
+            "health_id": user.health_id,
+            "gender": getattr(user, "gender", None) or "unknown",
+            "blood_group": getattr(user, "blood_group", None) or "N/A",
+        }
+        meds_dict = [
+            {"name": m.name, "dosage": m.dosage, "frequency": m.frequency}
+            for m in active_meds
+        ]
+        allergies_dict = [
+            {"allergen": a.allergen, "severity": a.severity}
+            for a in allergies
+        ]
+        records_dict = [
+            {
+                "document_type": r.document_type,
+                "consultation_date": r.consultation_date,
+                "doctor_name": r.doctor_name,
+                "hospital_name": r.hospital_name,
+                "extracted_data": r.extracted_data or {},
+            }
+            for r in records
+        ]
+        biomarkers_dict = [
+            {
+                "biomarker_name": b.biomarker_name,
+                "value": float(b.value),
+                "unit": b.unit,
+                "status": b.status,
+                "test_date": b.test_date,
+            }
+            for b in abnormal_biomarkers
+        ]
+
+        final_state = await run_doctor_summary(
+            patient_profile=patient_dict,
+            records=records_dict,
+            active_medications=meds_dict,
+            allergies=allergies_dict,
+            abnormal_biomarkers=biomarkers_dict,
+            patient_id=str(user_id),
+        )
+        return DoctorSummaryResponse.model_validate(final_state["final_summary"])
 
     # ------------------------------------------------------------------
     # Private helpers

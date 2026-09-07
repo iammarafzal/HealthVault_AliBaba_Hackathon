@@ -3,7 +3,7 @@
 
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from sqlalchemy import select
@@ -13,6 +13,10 @@ from app.models.allergy import Allergy
 from app.models.medication import Medication
 from app.schemas.interactions import DrugInteractionAlert, InteractionCheckResponse
 from app.services.llm_provider import get_llm_provider
+from app.agents.graphs.interaction_graph import (
+    interaction_evaluation_graph,
+    run_interaction_evaluation,
+)
 
 logger = logging.getLogger("healthvault")
 
@@ -99,6 +103,29 @@ class DrugInteractionAgent:
             "LLM provider returned empty/invalid interaction data; defaulting to no conflicts"
         )
         return InteractionCheckResponse(has_conflicts=False, alerts=[])
+
+    @staticmethod
+    async def check_interactions_graph(
+        candidate_medications: List[str],
+        active_medications: Optional[List[Any]] = None,
+        allergies: Optional[List[Any]] = None,
+        patient_id: Optional[str] = None,
+    ) -> InteractionCheckResponse:
+        """Execute interaction check directly via the LangGraph StateGraph pipeline."""
+        final_state = await run_interaction_evaluation(
+            candidate_medications=candidate_medications,
+            active_medications=active_medications,
+            allergies=allergies,
+            patient_id=patient_id,
+        )
+        alerts = [
+            DrugInteractionAlert(**a) if isinstance(a, dict) else a
+            for a in final_state.get("alerts", [])
+        ]
+        return InteractionCheckResponse(
+            has_conflicts=final_state.get("has_conflicts", False),
+            alerts=alerts,
+        )
 
 
 # ---------------------------------------------------------------------------

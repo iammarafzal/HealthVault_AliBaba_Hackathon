@@ -17,6 +17,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { getPublicEmergencyProfile } from "@/services/emergencyService";
+import { getApiBaseUrl } from "@/services/apiClient";
 import type { EmergencyProfileResponse } from "@/types/api";
 import { cn } from "@/lib/utils";
 
@@ -166,7 +167,7 @@ export default function EmergencyPublicTriagePage({ params }: EmergencyPageProps
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+      const apiBase = getApiBaseUrl();
       if (token) {
         window.location.href = `${apiBase}/emergency/gateway/${params.health_id}?token=${encodeURIComponent(token)}`;
       } else {

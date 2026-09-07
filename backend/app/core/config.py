@@ -81,6 +81,11 @@ class Settings(BaseSettings):
     OSS_BUCKET_NAME: str = ""
     OSS_ENDPOINT: str = ""
 
+    # Supabase Private Storage Configuration
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_SERVICE_KEY: Optional[str] = None
+    SUPABASE_STORAGE_BUCKET: str = "prescriptions"
+
     # Groq — Whisper Speech-to-Text (Urdu ASR)
     GROQ_API_KEY: str = ""
     GROQ_ASR_MODEL: str = "whisper-large-v3"

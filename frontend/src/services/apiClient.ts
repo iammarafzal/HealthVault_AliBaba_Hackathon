@@ -8,11 +8,49 @@
 
 import axios from "axios";
 
-const rawBaseUrl =
-  process.env.NEXT_PUBLIC_API_URL || "https://healthvault-backend.onrender.com";
-const API_BASE_URL = rawBaseUrl.endsWith("/api/v1")
-  ? rawBaseUrl
-  : `${rawBaseUrl.replace(/\/$/, "")}/api/v1`;
+export function getApiBaseUrl(): string {
+  // If running in the browser:
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname;
+    const isLocalhost =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname.endsWith(".local");
+
+    // When running locally in browser, ALWAYS route to local backend
+    if (isLocalhost) {
+      if (
+        process.env.NEXT_PUBLIC_API_URL &&
+        !process.env.NEXT_PUBLIC_API_URL.includes("onrender.com")
+      ) {
+        const custom = process.env.NEXT_PUBLIC_API_URL.trim();
+        return custom.endsWith("/api/v1") ? custom : `${custom.replace(/\/$/, "")}/api/v1`;
+      }
+      return "http://localhost:8000/api/v1";
+    }
+  }
+
+  // Server-side / Node development mode: connect to local backend
+  if (process.env.NODE_ENV === "development") {
+    if (
+      process.env.NEXT_PUBLIC_API_URL &&
+      !process.env.NEXT_PUBLIC_API_URL.includes("onrender.com")
+    ) {
+      const custom = process.env.NEXT_PUBLIC_API_URL.trim();
+      return custom.endsWith("/api/v1") ? custom : `${custom.replace(/\/$/, "")}/api/v1`;
+    }
+    return "http://localhost:8000/api/v1";
+  }
+
+  // Production environment: connect to deployed backend
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    const custom = process.env.NEXT_PUBLIC_API_URL.trim();
+    return custom.endsWith("/api/v1") ? custom : `${custom.replace(/\/$/, "")}/api/v1`;
+  }
+  return "https://healthvault-backend.onrender.com/api/v1";
+}
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -24,10 +62,11 @@ export const apiClient = axios.create({
 });
 
 // ---------------------------------------------------------------------------
-// Request interceptor — attach Bearer token when present in localStorage
+// Request interceptor — attach Bearer token and dynamic baseURL
 // ---------------------------------------------------------------------------
 apiClient.interceptors.request.use(
   (config) => {
+    config.baseURL = getApiBaseUrl();
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("token");
       if (token && !config.headers.Authorization) {

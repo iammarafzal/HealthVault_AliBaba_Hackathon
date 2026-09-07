@@ -89,21 +89,21 @@ export default function RecordCard({ record, onDelete }: RecordCardProps) {
   const countChips: { label: string; count: number; icon: React.ElementType }[] =
     record.document_type === "lab_report"
       ? [
-          { label: "biomarkers", count: entities.biomarkers.length, icon: FlaskConical },
-          { label: "diagnoses", count: entities.diagnoses.length, icon: Stethoscope },
-          { label: "allergies", count: entities.allergies.length, icon: ShieldAlert },
-        ]
+        { label: "biomarkers", count: entities.biomarkers.length, icon: FlaskConical },
+        { label: "diagnoses", count: entities.diagnoses.length, icon: Stethoscope },
+        { label: "allergies", count: entities.allergies.length, icon: ShieldAlert },
+      ]
       : record.document_type === "discharge_summary"
         ? [
-            { label: "diagnoses", count: entities.diagnoses.length, icon: Stethoscope },
-            { label: "medications", count: entities.medications.length, icon: Pill },
-            { label: "surgical notes", count: record.surgical_notes.length, icon: ClipboardList },
-          ]
+          { label: "diagnoses", count: entities.diagnoses.length, icon: Stethoscope },
+          { label: "medications", count: entities.medications.length, icon: Pill },
+          { label: "surgical notes", count: record.surgical_notes.length, icon: ClipboardList },
+        ]
         : [
-            { label: "medications", count: entities.medications.length, icon: Pill },
-            { label: "diagnoses", count: entities.diagnoses.length, icon: Stethoscope },
-            { label: "allergies", count: entities.allergies.length, icon: ShieldAlert },
-          ];
+          { label: "medications", count: entities.medications.length, icon: Pill },
+          { label: "diagnoses", count: entities.diagnoses.length, icon: Stethoscope },
+          { label: "allergies", count: entities.allergies.length, icon: ShieldAlert },
+        ];
 
   return (
     <Card className="flex flex-col overflow-hidden border border-vault-border bg-card shadow-xs transition-shadow hover:shadow-md dark:border-border">
@@ -379,27 +379,27 @@ export default function RecordCard({ record, onDelete }: RecordCardProps) {
         {/* ── TAB 2: Document Preview ── */}
         {activeTab === "preview" && (
           <div className="space-y-2">
-            {record.file_url ? (
+            {(record.signed_url || record.file_url || record.document_url) ? (
               <>
                 <div className="overflow-hidden rounded-lg border border-vault-border bg-vault-surface/40 dark:border-border dark:bg-card">
                   {isPdf ? (
                     // eslint-disable-next-line jsx-a11y/iframe-has-title
                     <iframe
-                      src={record.file_url}
+                      src={record.signed_url || record.file_url || record.document_url}
                       className="h-64 w-full"
                       aria-label="PDF document preview"
                     />
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={record.file_url}
+                      src={record.signed_url || record.file_url || record.document_url}
                       alt={filename || "Document preview"}
                       className="max-h-64 w-full object-contain"
                     />
                   )}
                 </div>
                 <a
-                  href={record.file_url}
+                  href={record.signed_url || record.file_url || record.document_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-[11px] font-semibold text-vault-teal hover:underline"

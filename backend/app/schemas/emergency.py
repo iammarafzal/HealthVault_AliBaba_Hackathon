@@ -21,6 +21,18 @@ class EmergencyProfileResponse(BaseModel):
     is_revoked: bool = False
 
 
+class EmergencyDocumentResponse(BaseModel):
+    """Emergency document reference with ephemeral signed URL."""
+    id: str
+    document_type: str
+    document_url: str
+    signed_url: Optional[str] = None
+    doctor_name: Optional[str] = None
+    hospital_name: Optional[str] = None
+    consultation_date: Optional[str] = None
+    created_at: Optional[str] = None
+
+
 class EmergencyAccessResponse(BaseModel):
     """Returned by the token-gated public emergency endpoint."""
     health_id: str
@@ -32,6 +44,7 @@ class EmergencyAccessResponse(BaseModel):
     emergency_contacts: List[EmergencyContactResponse] = []
     emergency_notes: Optional[str] = None
     is_revoked: bool = False
+    documents: List[EmergencyDocumentResponse] = []
 
 
 class EmergencySessionDataResponse(EmergencyAccessResponse):

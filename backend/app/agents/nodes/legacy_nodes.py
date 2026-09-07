@@ -1,5 +1,5 @@
-# HealthVault AI — LangGraph Workflow Nodes
-# Router, extraction, and validation nodes for the medical document pipeline
+# HealthVault AI — Legacy LangGraph Workflow Nodes
+# Preserved for backward compatibility with MedicalAgentState and existing tests.
 
 import logging
 from typing import Any, Dict
@@ -11,10 +11,6 @@ from app.schemas.vault import ExtractedDocumentEntities
 from app.services.llm_provider import get_llm_provider
 
 logger = logging.getLogger("healthvault")
-
-# ---------------------------------------------------------------------------
-# System prompts (from AGENT_PROMPTS.md §1)
-# ---------------------------------------------------------------------------
 
 MEDICAL_EXTRACTION_SYSTEM_PROMPT = (
     "Medical data extraction agent. Analyze OCR text from a prescription, lab report, "
@@ -45,11 +41,6 @@ DISCHARGE_EXTRACTION_SYSTEM_PROMPT = (
 )
 
 
-# ---------------------------------------------------------------------------
-# Router
-# ---------------------------------------------------------------------------
-
-
 def router_node(state: MedicalAgentState) -> Dict[str, Any]:
     """Pass-through router node — the actual routing logic is in the conditional edge."""
     logger.info(
@@ -69,11 +60,6 @@ def route_by_document_type(state: MedicalAgentState) -> str:
         return "clinical_summary_extraction_node"
     else:
         return "prescription_extraction_node"
-
-
-# ---------------------------------------------------------------------------
-# Extraction nodes
-# ---------------------------------------------------------------------------
 
 
 async def prescription_extraction_node(state: MedicalAgentState) -> Dict[str, Any]:
@@ -105,7 +91,6 @@ async def lab_extraction_node(state: MedicalAgentState) -> Dict[str, Any]:
     if not result:
         return {"errors": ["LLM extraction failed for lab report"]}
 
-    # Lab reports may return biomarkers in a nested structure — normalize
     biomarkers = result.get("biomarkers", result.get("lab_biomarkers", []))
     return {"extracted_entities": result, "lab_biomarkers": biomarkers}
 
@@ -127,17 +112,8 @@ async def clinical_summary_extraction_node(state: MedicalAgentState) -> Dict[str
     return {"extracted_entities": result}
 
 
-# ---------------------------------------------------------------------------
-# Validation
-# ---------------------------------------------------------------------------
-
-
 def validation_node(state: MedicalAgentState) -> Dict[str, Any]:
-    """Validate extracted_entities against the ExtractedDocumentEntities Pydantic schema.
-
-    Uses a dedicated LLM-output schema that does NOT require DB-generated fields
-    (record_id, raw_ocr_text), avoiding false-positive ValidationErrors.
-    """
+    """Validate extracted_entities against the ExtractedDocumentEntities Pydantic schema."""
     entities = state.get("extracted_entities", {})
     errors = list(state.get("errors", []))
 
@@ -146,10 +122,9 @@ def validation_node(state: MedicalAgentState) -> Dict[str, Any]:
         return {"errors": errors}
 
     try:
-        # Validate against the LLM-output schema (Pydantic v2)
         ExtractedDocumentEntities.model_validate(entities)
         logger.info("Validation passed for extracted entities")
-        return {"errors": errors}  # No new errors
+        return {"errors": errors}
     except ValidationError as exc:
         error_msg = f"Validation failed: {exc.errors()}"
         logger.warning(error_msg)

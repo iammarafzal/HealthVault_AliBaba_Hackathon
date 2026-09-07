@@ -6,9 +6,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import type { VaultDocumentType } from "@/types/api";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+import { getApiBaseUrl } from "@/services/apiClient";
 
 export type StreamStep =
   | "idle"
@@ -93,7 +91,7 @@ export function useDocumentStream(options?: UseDocumentStreamOptions) {
       }
 
       try {
-        const response = await fetch(`${API_BASE_URL}/vault/upload-stream`, {
+        const response = await fetch(`${getApiBaseUrl()}/vault/upload-stream`, {
           method: "POST",
           headers,
           body: formData,

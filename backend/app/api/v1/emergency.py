@@ -18,7 +18,9 @@ from app.models.emergency_scan import EmergencyScanLog
 from app.models.emergency_session import EmergencyTriageSession
 from app.models.notification import Notification
 from app.models.privacy import PrivacySettings
+from app.models.record import MedicalRecord
 from app.models.user import User
+from app.services.storage_service import generate_signed_document_url
 from app.schemas.emergency import (
     EmergencyAccessResponse,
     EmergencyScanLogResponse,
@@ -274,6 +276,19 @@ async def get_emergency_session_data(
         mock_data = MOCK_EMERGENCY_PROFILE.model_dump()
         mock_data["health_id"] = health_id
         mock_data["expires_in_seconds"] = remaining_sec
+        triage_expiry = min(900, remaining_sec if remaining_sec > 0 else 900)
+        mock_data["documents"] = [
+            {
+                "id": "mock-doc-1",
+                "document_type": "prescription",
+                "document_url": "mock/prescription.jpg",
+                "signed_url": generate_signed_document_url("mock/prescription.jpg", expires_in=triage_expiry) or "mock/prescription.jpg",
+                "doctor_name": "Dr. Tariq Mahmood",
+                "hospital_name": "Shifa International Hospital",
+                "consultation_date": "2025-02-15",
+                "created_at": "2025-02-15T10:00:00Z",
+            }
+        ]
         return EmergencySessionDataResponse(**mock_data)
 
     try:
@@ -284,6 +299,53 @@ async def get_emergency_session_data(
         remaining_sec = max(0, int((sess_expiry - now).total_seconds()))
         profile_dict = profile.model_dump()
         profile_dict["expires_in_seconds"] = remaining_sec
+
+        # ── Ephemeral Emergency Triage Signed Document URLs ──
+        # Generate a signed URL with a lifetime strictly bounded by the active 15-minute triage window (expires_in <= 900).
+        # Only attach signed URLs for documents the patient has explicitly marked as permitted in their emergency privacy toggles.
+        triage_expiry = min(900, remaining_sec if remaining_sec > 0 else 900)
+        permitted_documents = []
+
+        patient_user = await db.scalar(select(User).where(User.health_id == health_id))
+        if patient_user and not profile_dict.get("is_revoked"):
+            privacy_orm = await db.scalar(
+                select(PrivacySettings).where(PrivacySettings.user_id == patient_user.id)
+            )
+            # Check if clinical document sharing is permitted by patient privacy settings
+            docs_permitted_by_privacy = True
+            if privacy_orm:
+                if privacy_orm.qr_revoked or not privacy_orm.show_active_meds:
+                    docs_permitted_by_privacy = False
+
+            if docs_permitted_by_privacy:
+                rec_stmt = (
+                    select(MedicalRecord)
+                    .where(MedicalRecord.user_id == patient_user.id)
+                    .order_by(MedicalRecord.created_at.desc())
+                )
+                rec_res = await db.execute(rec_stmt)
+                records = rec_res.scalars().all()
+                for rec in records:
+                    ext = rec.extracted_data or {}
+                    # Only include documents where emergency access is permitted
+                    is_doc_permitted = ext.get("permitted_in_emergency", True) and ext.get("share_in_emergency", True)
+                    if is_doc_permitted and rec.document_url:
+                        signed_url = generate_signed_document_url(
+                            storage_path=rec.document_url,
+                            expires_in=triage_expiry,
+                        )
+                        permitted_documents.append({
+                            "id": str(rec.id),
+                            "document_type": rec.document_type,
+                            "document_url": rec.document_url,
+                            "signed_url": signed_url or rec.document_url,
+                            "doctor_name": rec.doctor_name,
+                            "hospital_name": rec.hospital_name,
+                            "consultation_date": rec.consultation_date.isoformat() if rec.consultation_date else None,
+                            "created_at": rec.created_at.isoformat() if rec.created_at else None,
+                        })
+
+        profile_dict["documents"] = permitted_documents
         return EmergencySessionDataResponse(**profile_dict)
     except ValueError as exc:
         raise HTTPException(
