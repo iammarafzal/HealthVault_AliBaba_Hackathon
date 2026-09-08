@@ -47,7 +47,12 @@ export function getApiBaseUrl(): string {
     const custom = process.env.NEXT_PUBLIC_API_URL.trim();
     return custom.endsWith("/api/v1") ? custom : `${custom.replace(/\/$/, "")}/api/v1`;
   }
-  return "https://healthvault-backend.onrender.com/api/v1";
+  return "https://healthvault-backend-lbrc.onrender.com/api/v1";
+}
+
+export function getBackendRootUrl(): string {
+  const base = getApiBaseUrl();
+  return base.replace(/\/api\/v1\/?$/, "");
 }
 
 export const API_BASE_URL = getApiBaseUrl();

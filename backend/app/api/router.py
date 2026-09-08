@@ -33,5 +33,7 @@ api_router.include_router(schedule_router)
 
 # Health check within v1
 @api_router.get("/health", tags=["Health"])
+@api_router.get("/healthz", tags=["Health"])
 async def v1_health_check():
     return {"status": "healthy", "version": "v1"}
+

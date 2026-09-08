@@ -8,10 +8,12 @@ import UrduSection from "@/components/landing/UrduSection";
 import TrustSection from "@/components/landing/TrustSection";
 import CTABanner from "@/components/landing/CTABanner";
 import Footer from "@/components/landing/Footer";
+import BackendWarmup from "@/components/landing/BackendWarmup";
 
 export default function Home() {
   return (
     <div className="min-h-screen bg-vault-stoneWhite">
+      <BackendWarmup />
       <LandingNavbar />
       <main>
         <Hero />
